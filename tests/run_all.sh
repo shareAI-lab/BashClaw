@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Parse args
 VERBOSE=false
 SINGLE_FILE=""
-SKIP_INTEGRATION=false
+MODE="all"  # all, unit, integration, compat
 
 for arg in "$@"; do
   case "$arg" in
@@ -14,7 +14,19 @@ for arg in "$@"; do
       VERBOSE=true
       ;;
     --skip-integration)
-      SKIP_INTEGRATION=true
+      MODE="unit"
+      ;;
+    --unit)
+      MODE="unit"
+      ;;
+    --integration)
+      MODE="integration"
+      ;;
+    --compat)
+      MODE="compat"
+      ;;
+    --all)
+      MODE="all"
       ;;
     *)
       SINGLE_FILE="$arg"
@@ -28,9 +40,13 @@ TOTAL_PASSED=0
 TOTAL_FAILED=0
 TOTAL_TESTS=0
 FAILED_FILES=()
+FILE_RESULTS=()
+SUITE_START="$(date +%s)"
 
 printf '====================================\n'
 printf '  bashclaw test suite\n'
+printf '====================================\n'
+printf '  Mode: %s\n' "$MODE"
 printf '====================================\n'
 
 run_test_file() {
@@ -38,52 +54,13 @@ run_test_file() {
   local name
   name="$(basename "$file")"
 
-  if ! bash "$file"; then
-    FAILED_FILES+=("$name")
-  fi
-
-  # Read the counters from the subshell output (not possible directly).
-  # Instead, we rely on the exit code from report_results.
-}
-
-# Collect test files
-if [[ -n "$SINGLE_FILE" ]]; then
-  if [[ -f "$SINGLE_FILE" ]]; then
-    TEST_FILES=("$SINGLE_FILE")
-  elif [[ -f "${SCRIPT_DIR}/${SINGLE_FILE}" ]]; then
-    TEST_FILES=("${SCRIPT_DIR}/${SINGLE_FILE}")
-  elif [[ -f "${SCRIPT_DIR}/${SINGLE_FILE}.sh" ]]; then
-    TEST_FILES=("${SCRIPT_DIR}/${SINGLE_FILE}.sh")
-  else
-    printf 'ERROR: Test file not found: %s\n' "$SINGLE_FILE"
-    exit 1
-  fi
-else
-  TEST_FILES=(
-    "${SCRIPT_DIR}/test_utils.sh"
-    "${SCRIPT_DIR}/test_config.sh"
-    "${SCRIPT_DIR}/test_session.sh"
-    "${SCRIPT_DIR}/test_tools.sh"
-    "${SCRIPT_DIR}/test_routing.sh"
-    "${SCRIPT_DIR}/test_agent.sh"
-    "${SCRIPT_DIR}/test_channels.sh"
-    "${SCRIPT_DIR}/test_cli.sh"
-  )
-
-  if [[ "$SKIP_INTEGRATION" != "true" ]]; then
-    TEST_FILES+=("${SCRIPT_DIR}/test_integration.sh")
-  fi
-fi
-
-FILE_RESULTS=()
-
-for file in "${TEST_FILES[@]}"; do
   if [[ ! -f "$file" ]]; then
     printf 'WARNING: Skipping missing file: %s\n' "$file"
-    continue
+    return
   fi
 
-  name="$(basename "$file")"
+  local file_start
+  file_start="$(date +%s)"
 
   # Run in subshell and capture output + exit code
   set +e
@@ -91,9 +68,14 @@ for file in "${TEST_FILES[@]}"; do
   rc=$?
   set -e
 
+  local file_end
+  file_end="$(date +%s)"
+  local file_duration=$(( file_end - file_start ))
+
   printf '%s\n' "$output"
 
   # Parse passed/failed from output (macOS-compatible sed)
+  local file_passed file_failed file_total
   file_passed="$(printf '%s\n' "$output" | sed -n 's/.*Passed:[[:space:]]*\([0-9][0-9]*\).*/\1/p' | tail -1)"
   file_failed="$(printf '%s\n' "$output" | sed -n 's/.*Failed:[[:space:]]*\([0-9][0-9]*\).*/\1/p' | tail -1)"
   file_total="$(printf '%s\n' "$output" | sed -n 's/.*Total:[[:space:]]*\([0-9][0-9]*\).*/\1/p' | tail -1)"
@@ -108,11 +90,74 @@ for file in "${TEST_FILES[@]}"; do
 
   if (( rc != 0 )); then
     FAILED_FILES+=("$name")
-    FILE_RESULTS+=("FAIL $name ($file_passed/$file_total passed)")
+    FILE_RESULTS+=("FAIL $name ($file_passed/$file_total passed, ${file_duration}s)")
   else
-    FILE_RESULTS+=("PASS $name ($file_passed/$file_total passed)")
+    FILE_RESULTS+=("PASS $name ($file_passed/$file_total passed, ${file_duration}s)")
   fi
+}
+
+# Collect test files based on mode
+if [[ -n "$SINGLE_FILE" ]]; then
+  if [[ -f "$SINGLE_FILE" ]]; then
+    TEST_FILES=("$SINGLE_FILE")
+  elif [[ -f "${SCRIPT_DIR}/${SINGLE_FILE}" ]]; then
+    TEST_FILES=("${SCRIPT_DIR}/${SINGLE_FILE}")
+  elif [[ -f "${SCRIPT_DIR}/${SINGLE_FILE}.sh" ]]; then
+    TEST_FILES=("${SCRIPT_DIR}/${SINGLE_FILE}.sh")
+  else
+    printf 'ERROR: Test file not found: %s\n' "$SINGLE_FILE"
+    exit 1
+  fi
+else
+  UNIT_FILES=(
+    "${SCRIPT_DIR}/test_utils.sh"
+    "${SCRIPT_DIR}/test_config.sh"
+    "${SCRIPT_DIR}/test_session.sh"
+    "${SCRIPT_DIR}/test_tools.sh"
+    "${SCRIPT_DIR}/test_routing.sh"
+    "${SCRIPT_DIR}/test_agent.sh"
+    "${SCRIPT_DIR}/test_channels.sh"
+    "${SCRIPT_DIR}/test_cli.sh"
+    "${SCRIPT_DIR}/test_memory.sh"
+    "${SCRIPT_DIR}/test_hooks.sh"
+    "${SCRIPT_DIR}/test_security.sh"
+    "${SCRIPT_DIR}/test_process.sh"
+    "${SCRIPT_DIR}/test_boot.sh"
+    "${SCRIPT_DIR}/test_autoreply.sh"
+    "${SCRIPT_DIR}/test_daemon.sh"
+    "${SCRIPT_DIR}/test_install.sh"
+  )
+
+  INTEGRATION_FILES=(
+    "${SCRIPT_DIR}/test_integration.sh"
+  )
+
+  COMPAT_FILES=(
+    "${SCRIPT_DIR}/test_compat.sh"
+  )
+
+  case "$MODE" in
+    unit)
+      TEST_FILES=("${UNIT_FILES[@]}")
+      ;;
+    integration)
+      TEST_FILES=("${INTEGRATION_FILES[@]}")
+      ;;
+    compat)
+      TEST_FILES=("${COMPAT_FILES[@]}")
+      ;;
+    all)
+      TEST_FILES=("${UNIT_FILES[@]}" "${INTEGRATION_FILES[@]}" "${COMPAT_FILES[@]}")
+      ;;
+  esac
+fi
+
+for file in "${TEST_FILES[@]}"; do
+  run_test_file "$file"
 done
+
+SUITE_END="$(date +%s)"
+SUITE_DURATION=$(( SUITE_END - SUITE_START ))
 
 # Final summary
 printf '\n====================================\n'
@@ -127,6 +172,7 @@ printf '\n'
 printf '  Total tests:  %d\n' "$TOTAL_TESTS"
 printf '  Passed:       %d\n' "$TOTAL_PASSED"
 printf '  Failed:       %d\n' "$TOTAL_FAILED"
+printf '  Duration:     %ds\n' "$SUITE_DURATION"
 
 if (( ${#FAILED_FILES[@]} > 0 )); then
   printf '\n  Failed files:\n'

@@ -9,18 +9,22 @@ TOOL_SHELL_TIMEOUT="${TOOL_SHELL_TIMEOUT:-30}"
 
 _tool_handler() {
   case "$1" in
-    web_fetch)  echo "tool_web_fetch" ;;
-    web_search) echo "tool_web_search" ;;
-    shell)      echo "tool_shell" ;;
-    memory)     echo "tool_memory" ;;
-    cron)       echo "tool_cron" ;;
-    message)    echo "tool_message" ;;
-    *)          echo "" ;;
+    web_fetch)      echo "tool_web_fetch" ;;
+    web_search)     echo "tool_web_search" ;;
+    shell)          echo "tool_shell" ;;
+    memory)         echo "tool_memory" ;;
+    cron)           echo "tool_cron" ;;
+    message)        echo "tool_message" ;;
+    agents_list)    echo "tool_agents_list" ;;
+    session_status) echo "tool_session_status" ;;
+    sessions_list)  echo "tool_sessions_list" ;;
+    agent_message)  echo "tool_agent_message" ;;
+    *)              echo "" ;;
   esac
 }
 
 _tool_list() {
-  echo "web_fetch web_search shell memory cron message"
+  echo "web_fetch web_search shell memory cron message agents_list session_status sessions_list agent_message"
 }
 
 # ---- SSRF private IP patterns ----
@@ -103,6 +107,18 @@ Available tools:
 
 6. message - Send a message via the configured channel handler.
    Parameters: action (send, required), channel (string), target (string), message (string, required)
+
+7. agents_list - List all configured agents with their settings.
+   Parameters: none
+
+8. session_status - Query session info for the current agent.
+   Parameters: agent_id (string), channel (string), sender (string)
+
+9. sessions_list - List all active sessions across all agents.
+   Parameters: none
+
+10. agent_message - Send a message to another agent.
+    Parameters: target_agent (string, required), message (string, required), from_agent (string, optional)
 TOOLDESC
 }
 
@@ -195,6 +211,54 @@ tools_build_spec() {
         "message": {"type": "string", "description": "The message text to send."}
       },
       "required": ["action", "message"]
+    }
+  }]')"
+
+  specs="$(printf '%s' "$specs" | jq '. + [{
+    "name": "agents_list",
+    "description": "List all configured agents with their settings.",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  }]')"
+
+  specs="$(printf '%s' "$specs" | jq '. + [{
+    "name": "session_status",
+    "description": "Query session info for a specific agent, channel, and sender.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "agent_id": {"type": "string", "description": "Agent ID to query."},
+        "channel": {"type": "string", "description": "Channel name."},
+        "sender": {"type": "string", "description": "Sender identifier."}
+      },
+      "required": []
+    }
+  }]')"
+
+  specs="$(printf '%s' "$specs" | jq '. + [{
+    "name": "sessions_list",
+    "description": "List all active sessions across all agents.",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  }]')"
+
+  specs="$(printf '%s' "$specs" | jq '. + [{
+    "name": "agent_message",
+    "description": "Send a message to another agent and get their response.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "target_agent": {"type": "string", "description": "The agent ID to send the message to."},
+        "message": {"type": "string", "description": "The message to send."},
+        "from_agent": {"type": "string", "description": "The sending agent ID (optional)."}
+      },
+      "required": ["target_agent", "message"]
     }
   }]')"
 
@@ -401,7 +465,25 @@ tool_shell() {
   elif is_command_available gtimeout; then
     output="$(gtimeout "$timeout_val" bash -c "$cmd" 2>&1)" || true
   else
-    output="$(bash -c "$cmd" 2>&1)" || true
+    # Pure-bash timeout fallback (macOS/Termux)
+    local _tmpout
+    _tmpout="$(mktemp -t bashclaw_sh.XXXXXX 2>/dev/null || mktemp /tmp/bashclaw_sh.XXXXXX)"
+    bash -c "$cmd" > "$_tmpout" 2>&1 &
+    local _pid=$!
+    local _waited=0
+    while kill -0 "$_pid" 2>/dev/null && (( _waited < timeout_val )); do
+      sleep 1
+      _waited=$((_waited + 1))
+    done
+    if kill -0 "$_pid" 2>/dev/null; then
+      kill -9 "$_pid" 2>/dev/null
+      wait "$_pid" 2>/dev/null || true
+      output="[command timed out after ${timeout_val}s]"
+    else
+      wait "$_pid" 2>/dev/null || true
+      output="$(cat "$_tmpout")"
+    fi
+    rm -f "$_tmpout"
   fi
   exit_code=$?
 
@@ -617,6 +699,68 @@ tool_message() {
     jq -nc --arg ch "$channel" --arg tgt "$target" --arg msg "$message_text" \
       '{"sent": false, "channel": $ch, "target": $tgt, "message": $msg, "reason": "no handler configured"}'
   fi
+}
+
+# ---- Tool: agents_list ----
+
+# List all configured agents from the config
+tool_agents_list() {
+  require_command jq "agents_list tool requires jq"
+
+  local agents_raw
+  agents_raw="$(config_get_raw '.agents.list // []')"
+  local defaults
+  defaults="$(config_get_raw '.agents.defaults // {}')"
+
+  jq -nc --argjson agents "$agents_raw" --argjson defaults "$defaults" \
+    '{agents: $agents, defaults: $defaults, count: ($agents | length)}'
+}
+
+# ---- Tool: session_status ----
+
+# Query session info for a specific agent/channel/sender
+tool_session_status() {
+  local input="$1"
+  require_command jq "session_status tool requires jq"
+
+  local agent_id channel sender
+  agent_id="$(printf '%s' "$input" | jq -r '.agent_id // "main"')"
+  channel="$(printf '%s' "$input" | jq -r '.channel // "default"')"
+  sender="$(printf '%s' "$input" | jq -r '.sender // empty')"
+
+  local sess_file
+  sess_file="$(session_file "$agent_id" "$channel" "$sender")"
+
+  local msg_count=0
+  local last_role=""
+  if [[ -f "$sess_file" ]]; then
+    msg_count="$(session_count "$sess_file")"
+    last_role="$(session_last_role "$sess_file")"
+  fi
+
+  local model
+  model="$(agent_resolve_model "$agent_id")"
+  local provider
+  provider="$(agent_resolve_provider "$model")"
+
+  jq -nc \
+    --arg aid "$agent_id" \
+    --arg ch "$channel" \
+    --arg snd "$sender" \
+    --arg sf "$sess_file" \
+    --argjson mc "$msg_count" \
+    --arg lr "$last_role" \
+    --arg m "$model" \
+    --arg p "$provider" \
+    '{agent_id: $aid, channel: $ch, sender: $snd, session_file: $sf, message_count: $mc, last_role: $lr, model: $m, provider: $p}'
+}
+
+# ---- Tool: sessions_list ----
+
+# List all active sessions across all agents
+tool_sessions_list() {
+  require_command jq "sessions_list tool requires jq"
+  session_list
 }
 
 # ---- SSRF helper ----

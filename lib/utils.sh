@@ -17,6 +17,14 @@ ensure_state_dir() {
     "$base/config"
     "$base/agents"
     "$base/cache"
+    "$base/memory"
+    "$base/hooks"
+    "$base/autoreplies"
+    "$base/queue"
+    "$base/queue/lanes"
+    "$base/pairing"
+    "$base/ratelimit"
+    "$base/usage"
   )
   for d in "${dirs[@]}"; do
     ensure_dir "$d"
@@ -37,13 +45,21 @@ require_command() {
 
 url_encode() {
   local input="$1"
-  if is_command_available python3; then
-    python3 -c "import urllib.parse; print(urllib.parse.quote('$input', safe=''))"
-  elif is_command_available jq; then
+  if is_command_available jq; then
     printf '%s' "$input" | jq -sRr '@uri'
+  elif is_command_available python3; then
+    printf '%s' "$input" | python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.stdin.read(), safe=''), end='')"
   else
-    log_error "url_encode requires python3 or jq"
-    return 1
+    # Pure bash fallback (handles common chars)
+    local c i encoded=""
+    for (( i=0; i<${#input}; i++ )); do
+      c="${input:$i:1}"
+      case "$c" in
+        [a-zA-Z0-9.~_-]) encoded+="$c" ;;
+        *) encoded+="$(printf '%%%02X' "'$c")" ;;
+      esac
+    done
+    printf '%s' "$encoded"
   fi
 }
 
@@ -81,16 +97,23 @@ uuid_generate() {
     python3 -c "import uuid; print(uuid.uuid4())"
   elif [[ -r /proc/sys/kernel/random/uuid ]]; then
     cat /proc/sys/kernel/random/uuid
+  elif [[ -r /dev/urandom ]]; then
+    # Termux/minimal-system fallback using /dev/urandom
+    local hex
+    hex="$(od -An -tx1 -N16 /dev/urandom 2>/dev/null | tr -d ' \n')"
+    printf '%s-%s-%s-%s-%s' \
+      "${hex:0:8}" "${hex:8:4}" "${hex:12:4}" "${hex:16:4}" "${hex:20:12}"
   else
-    log_error "uuid_generate requires uuidgen or python3"
-    return 1
+    # Absolute last resort: timestamp + PID + RANDOM
+    printf '%08x-%04x-%04x-%04x-%04x%08x' \
+      "$(date +%s)" "$$" "$RANDOM" "$RANDOM" "$RANDOM" "$(date +%N 2>/dev/null || echo $RANDOM)"
   fi
 }
 
 tmpfile() {
   local prefix="${1:-bashclaw}"
   local f
-  f="$(mktemp "/tmp/${prefix}.XXXXXX")"
+  f="$(mktemp -t "${prefix}.XXXXXX" 2>/dev/null || mktemp "/tmp/${prefix}.XXXXXX")"
   _TMPFILES+=("$f")
   printf '%s' "$f"
 }
@@ -118,7 +141,16 @@ file_size_bytes() {
 
 hash_string() {
   local input="$1"
-  printf '%s' "$input" | shasum -a 256 | cut -d' ' -f1
+  if is_command_available sha256sum; then
+    printf '%s' "$input" | sha256sum | cut -d' ' -f1
+  elif is_command_available shasum; then
+    printf '%s' "$input" | shasum -a 256 | cut -d' ' -f1
+  elif is_command_available openssl; then
+    printf '%s' "$input" | openssl dgst -sha256 | sed 's/^.* //'
+  else
+    # Last resort: use cksum (always available on POSIX)
+    printf '%s' "$input" | cksum | cut -d' ' -f1
+  fi
 }
 
 retry_with_backoff() {

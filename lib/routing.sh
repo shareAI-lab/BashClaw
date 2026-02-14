@@ -234,6 +234,16 @@ routing_dispatch() {
     return 1
   fi
 
+  # Security: audit log incoming message
+  security_audit_log "message_received" "channel=$channel sender=$sender"
+
+  # Security: rate limit check
+  if ! security_rate_limit "$sender" 2>/dev/null; then
+    log_info "Message rate-limited: sender=$sender"
+    printf ''
+    return 1
+  fi
+
   if ! routing_check_allowlist "$channel" "$sender"; then
     log_info "Message blocked by allowlist: channel=$channel sender=$sender"
     printf ''
@@ -246,9 +256,40 @@ routing_dispatch() {
     return 0
   fi
 
+  # Auto-reply check before agent dispatch
+  local auto_response
+  auto_response="$(autoreply_check "$message" "$channel" 2>/dev/null)" || true
+  if [[ -n "$auto_response" ]]; then
+    log_info "Auto-reply matched: channel=$channel sender=$sender"
+    security_audit_log "autoreply_matched" "channel=$channel sender=$sender"
+    local formatted
+    formatted="$(routing_format_reply "$channel" "$auto_response")"
+    printf '%s' "$formatted"
+    return 0
+  fi
+
   local agent_id
   agent_id="$(routing_resolve_agent "$channel" "$sender")"
   log_info "Routing: channel=$channel sender=$sender agent=$agent_id"
+
+  # Run pre_message hooks
+  local hook_input
+  hook_input="$(jq -nc \
+    --arg ch "$channel" \
+    --arg snd "$sender" \
+    --arg msg "$message" \
+    --arg aid "$agent_id" \
+    '{channel: $ch, sender: $snd, message: $msg, agent_id: $aid}' 2>/dev/null)"
+
+  local hooked_input
+  hooked_input="$(hooks_run "pre_message" "$hook_input" 2>/dev/null)" || true
+  if [[ -n "$hooked_input" ]]; then
+    local hooked_msg
+    hooked_msg="$(printf '%s' "$hooked_input" | jq -r '.message // empty' 2>/dev/null)"
+    if [[ -n "$hooked_msg" ]]; then
+      message="$hooked_msg"
+    fi
+  fi
 
   local response
   response="$(agent_run "$agent_id" "$message" "$channel" "$sender")"
@@ -258,6 +299,20 @@ routing_dispatch() {
     printf ''
     return 1
   fi
+
+  # Run post_message hooks
+  local post_hook_input
+  post_hook_input="$(jq -nc \
+    --arg ch "$channel" \
+    --arg snd "$sender" \
+    --arg msg "$message" \
+    --arg resp "$response" \
+    --arg aid "$agent_id" \
+    '{channel: $ch, sender: $snd, message: $msg, response: $resp, agent_id: $aid}' 2>/dev/null)"
+  hooks_run "post_message" "$post_hook_input" >/dev/null 2>&1 || true
+
+  # Security: audit log response
+  security_audit_log "message_responded" "channel=$channel sender=$sender agent=$agent_id"
 
   local formatted
   formatted="$(routing_format_reply "$channel" "$response")"

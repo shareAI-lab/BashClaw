@@ -248,16 +248,43 @@ agent_call_anthropic() {
 
   log_debug "Anthropic API call: model=$model url=$api_url"
 
-  local response
-  response="$(curl -sS --max-time 120 \
-    -H "x-api-key: ${api_key}" \
-    -H "anthropic-version: 2023-06-01" \
-    -H "content-type: application/json" \
-    -d "$body" \
-    "$api_url" 2>/dev/null)"
+  local response http_code
+  local response_file
+  response_file="$(tmpfile "anthropic_resp")"
 
-  if [[ $? -ne 0 || -z "$response" ]]; then
-    log_error "Anthropic API request failed"
+  # Retry with backoff on transient HTTP errors (429/500/502/503)
+  local attempt=0
+  local max_attempts=3
+  while (( attempt < max_attempts )); do
+    attempt=$((attempt + 1))
+
+    http_code="$(curl -sS --max-time 120 \
+      -o "$response_file" -w '%{http_code}' \
+      -H "x-api-key: ${api_key}" \
+      -H "anthropic-version: 2023-06-01" \
+      -H "content-type: application/json" \
+      -d "$body" \
+      "$api_url" 2>/dev/null)" || true
+
+    response="$(cat "$response_file" 2>/dev/null)"
+
+    case "$http_code" in
+      429|500|502|503)
+        if (( attempt < max_attempts )); then
+          local delay=$((2 * (1 << (attempt - 1)) + RANDOM % 3))
+          log_warn "Anthropic API HTTP $http_code, retry ${attempt}/${max_attempts} in ${delay}s"
+          sleep "$delay"
+          continue
+        fi
+        ;;
+    esac
+    break
+  done
+
+  rm -f "$response_file"
+
+  if [[ -z "$response" ]]; then
+    log_error "Anthropic API request failed (HTTP $http_code)"
     printf '{"error": "API request failed"}'
     return 1
   fi
@@ -336,15 +363,42 @@ agent_call_openai() {
 
   log_debug "OpenAI API call: model=$model"
 
-  local response
-  response="$(curl -sS --max-time 120 \
-    -H "Authorization: Bearer ${api_key}" \
-    -H "Content-Type: application/json" \
-    -d "$body" \
-    "$api_url" 2>/dev/null)"
+  local response http_code
+  local response_file
+  response_file="$(tmpfile "openai_resp")"
 
-  if [[ $? -ne 0 || -z "$response" ]]; then
-    log_error "OpenAI API request failed"
+  # Retry with backoff on transient HTTP errors (429/500/502/503)
+  local attempt=0
+  local max_attempts=3
+  while (( attempt < max_attempts )); do
+    attempt=$((attempt + 1))
+
+    http_code="$(curl -sS --max-time 120 \
+      -o "$response_file" -w '%{http_code}' \
+      -H "Authorization: Bearer ${api_key}" \
+      -H "Content-Type: application/json" \
+      -d "$body" \
+      "$api_url" 2>/dev/null)" || true
+
+    response="$(cat "$response_file" 2>/dev/null)"
+
+    case "$http_code" in
+      429|500|502|503)
+        if (( attempt < max_attempts )); then
+          local delay=$((2 * (1 << (attempt - 1)) + RANDOM % 3))
+          log_warn "OpenAI API HTTP $http_code, retry ${attempt}/${max_attempts} in ${delay}s"
+          sleep "$delay"
+          continue
+        fi
+        ;;
+    esac
+    break
+  done
+
+  rm -f "$response_file"
+
+  if [[ -z "$response" ]]; then
+    log_error "OpenAI API request failed (HTTP $http_code)"
     printf '{"error": "API request failed"}'
     return 1
   fi
@@ -560,4 +614,66 @@ agent_run() {
   session_prune "$sess_file" "$max_history_val"
 
   printf '%s' "$final_text"
+}
+
+# ---- Usage Tracking ----
+
+# Save API usage data to the session directory
+agent_track_usage() {
+  local agent_id="$1"
+  local model="$2"
+  local input_tokens="${3:-0}"
+  local output_tokens="${4:-0}"
+
+  require_command jq "agent_track_usage requires jq"
+
+  local usage_dir="${BASHCLAW_STATE_DIR:?}/usage"
+  ensure_dir "$usage_dir"
+  local now
+  now="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+
+  local line
+  line="$(jq -nc \
+    --arg aid "$agent_id" \
+    --arg m "$model" \
+    --argjson it "$input_tokens" \
+    --argjson ot "$output_tokens" \
+    --arg ts "$now" \
+    '{agent_id: $aid, model: $m, input_tokens: $it, output_tokens: $ot, timestamp: $ts}')"
+
+  printf '%s\n' "$line" >> "${usage_dir}/usage.jsonl"
+}
+
+# ---- Agent-to-Agent Messaging ----
+
+# Send a message from one agent to another via the routing system
+tool_agent_message() {
+  local input="$1"
+  require_command jq "tool_agent_message requires jq"
+
+  local target_agent message_text from_agent
+  target_agent="$(printf '%s' "$input" | jq -r '.target_agent // empty')"
+  message_text="$(printf '%s' "$input" | jq -r '.message // empty')"
+  from_agent="$(printf '%s' "$input" | jq -r '.from_agent // "main"')"
+
+  if [[ -z "$target_agent" ]]; then
+    printf '{"error": "target_agent is required"}'
+    return 1
+  fi
+
+  if [[ -z "$message_text" ]]; then
+    printf '{"error": "message is required"}'
+    return 1
+  fi
+
+  log_info "Agent message: from=$from_agent to=$target_agent"
+
+  local response
+  response="$(agent_run "$target_agent" "$message_text" "agent" "$from_agent" 2>&1)" || true
+
+  jq -nc \
+    --arg from "$from_agent" \
+    --arg to "$target_agent" \
+    --arg resp "$response" \
+    '{from_agent: $from, target_agent: $to, response: $resp}'
 }

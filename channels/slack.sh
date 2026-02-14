@@ -154,7 +154,7 @@ _SLACK_LAST_TS_DIR=""
 
 _slack_last_ts_init() {
   if [[ -z "$_SLACK_LAST_TS_DIR" ]]; then
-    _SLACK_LAST_TS_DIR="$(mktemp -d /tmp/bashclaw_slack_lt.XXXXXX)"
+    _SLACK_LAST_TS_DIR="$(mktemp -d -t bashclaw_slack.XXXXXX 2>/dev/null || mktemp -d /tmp/bashclaw_slack.XXXXXX)"
   fi
 }
 

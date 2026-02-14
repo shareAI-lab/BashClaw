@@ -316,10 +316,10 @@ cron_matches_now() {
   fi
 
   local now_min now_hour now_day now_month now_dow
-  now_min="$(date +%-M)"
-  now_hour="$(date +%-H)"
-  now_day="$(date +%-d)"
-  now_month="$(date +%-m)"
+  now_min=$(( 10#$(date +%M) ))
+  now_hour=$(( 10#$(date +%H) ))
+  now_day=$(( 10#$(date +%d) ))
+  now_month=$(( 10#$(date +%m) ))
   now_dow="$(date +%u)"  # 1=Monday, 7=Sunday
 
   cron_field_matches "${fields[0]}" "$now_min" 0 59 || return 1

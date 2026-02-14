@@ -22,12 +22,18 @@ Usage: bashclaw <command> [options]
 Commands:
   agent       Manage agents (start, stop, list, logs)
   gateway     Start/stop the HTTP gateway
+  daemon      Manage system service (install, status, logs)
   message     Send a message to an agent
   config      Manage configuration
   session     Manage conversation sessions
+  memory      Manage persistent key-value memory
+  cron        Manage scheduled jobs
+  hooks       Manage event hooks
   onboard     Interactive setup wizard
   status      Show system status
   doctor      Run diagnostics
+  update      Update bashclaw to latest version
+  completion  Generate shell completion scripts
   version     Show version info
 
 Options:
@@ -45,6 +51,155 @@ EOF
 
 cmd_version() {
   printf 'bashclaw %s\n' "$BASHCLAW_VERSION"
+}
+
+cmd_update() {
+  local install_dir="$BASHCLAW_ROOT"
+
+  if [[ -d "${install_dir}/.git" ]]; then
+    log_info "Updating via git pull..."
+    (cd "$install_dir" && git pull --ff-only)
+    if [[ $? -eq 0 ]]; then
+      printf 'Updated to latest version.\n'
+    else
+      log_error "Git pull failed"
+      return 1
+    fi
+  elif [[ -f "${install_dir}/../install.sh" ]]; then
+    log_info "Re-running installer..."
+    bash "${install_dir}/../install.sh"
+  else
+    log_error "Cannot determine installation method. Please re-run the installer."
+    return 1
+  fi
+}
+
+cmd_completion() {
+  local shell_type="${1:-bash}"
+
+  case "$shell_type" in
+    bash) _completion_bash ;;
+    zsh)  _completion_zsh ;;
+    *)
+      log_error "Unknown shell: $shell_type (supported: bash, zsh)"
+      return 1
+      ;;
+  esac
+}
+
+_completion_bash() {
+  cat <<'COMP'
+_bashclaw() {
+  local cur prev commands subcommands
+  COMPREPLY=()
+  cur="${COMP_WORDS[COMP_CWORD]}"
+  prev="${COMP_WORDS[COMP_CWORD-1]}"
+  commands="agent gateway daemon message config session memory cron hooks onboard status doctor update completion version help"
+
+  case "$prev" in
+    bashclaw)
+      COMPREPLY=($(compgen -W "$commands" -- "$cur"))
+      ;;
+    agent)
+      COMPREPLY=($(compgen -W "-m --message -a --agent -i --interactive -v --verbose -h --help" -- "$cur"))
+      ;;
+    gateway)
+      COMPREPLY=($(compgen -W "-p --port -v --verbose -d --daemon --stop -h --help" -- "$cur"))
+      ;;
+    daemon)
+      COMPREPLY=($(compgen -W "install uninstall status logs restart stop" -- "$cur"))
+      ;;
+    config)
+      COMPREPLY=($(compgen -W "show get set init validate edit path" -- "$cur"))
+      ;;
+    session)
+      COMPREPLY=($(compgen -W "list show clear delete export" -- "$cur"))
+      ;;
+    memory)
+      COMPREPLY=($(compgen -W "list search get set delete export import compact stats" -- "$cur"))
+      ;;
+    cron)
+      COMPREPLY=($(compgen -W "list add remove enable disable run history" -- "$cur"))
+      ;;
+    hooks)
+      COMPREPLY=($(compgen -W "list add remove enable disable test" -- "$cur"))
+      ;;
+    message)
+      COMPREPLY=($(compgen -W "send" -- "$cur"))
+      ;;
+    completion)
+      COMPREPLY=($(compgen -W "bash zsh" -- "$cur"))
+      ;;
+  esac
+}
+complete -F _bashclaw bashclaw
+COMP
+}
+
+_completion_zsh() {
+  cat <<'COMP'
+#compdef bashclaw
+
+_bashclaw() {
+  local -a commands
+  commands=(
+    'agent:Manage agents'
+    'gateway:Start/stop the HTTP gateway'
+    'daemon:Manage system service'
+    'message:Send a message to an agent'
+    'config:Manage configuration'
+    'session:Manage conversation sessions'
+    'memory:Manage persistent memory'
+    'cron:Manage scheduled jobs'
+    'hooks:Manage event hooks'
+    'onboard:Interactive setup wizard'
+    'status:Show system status'
+    'doctor:Run diagnostics'
+    'update:Update bashclaw'
+    'completion:Generate shell completions'
+    'version:Show version info'
+    'help:Show help'
+  )
+
+  _arguments '1:command:->command' '*::arg:->args'
+
+  case "$state" in
+    command)
+      _describe 'command' commands
+      ;;
+    args)
+      case "${words[1]}" in
+        daemon)
+          _values 'subcommand' install uninstall status logs restart stop
+          ;;
+        config)
+          _values 'subcommand' show get set init validate edit path
+          ;;
+        session)
+          _values 'subcommand' list show clear delete export
+          ;;
+        memory)
+          _values 'subcommand' list search get set delete export import compact stats
+          ;;
+        cron)
+          _values 'subcommand' list add remove enable disable run history
+          ;;
+        hooks)
+          _values 'subcommand' list add remove enable disable test
+          ;;
+        message)
+          _values 'subcommand' send
+          ;;
+        completion)
+          _values 'shell' bash zsh
+          ;;
+      esac
+      ;;
+  esac
+}
+
+_bashclaw "$@"
+COMP
 }
 
 cmd_status() {
@@ -153,6 +308,9 @@ main() {
     gateway)
       cmd_gateway "$@"
       ;;
+    daemon)
+      cmd_daemon "$@"
+      ;;
     message|msg)
       cmd_message "$@"
       ;;
@@ -162,6 +320,15 @@ main() {
     session|sess)
       cmd_session "$@"
       ;;
+    memory|mem)
+      cmd_memory "$@"
+      ;;
+    cron)
+      cmd_cron "$@"
+      ;;
+    hooks)
+      cmd_hooks "$@"
+      ;;
     onboard|setup)
       cmd_onboard "$@"
       ;;
@@ -170,6 +337,12 @@ main() {
       ;;
     doctor)
       cmd_doctor
+      ;;
+    update)
+      cmd_update
+      ;;
+    completion)
+      cmd_completion "$@"
       ;;
     version|-v|--version)
       cmd_version

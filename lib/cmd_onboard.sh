@@ -6,37 +6,46 @@ cmd_onboard() {
   printf '=====================\n\n'
 
   local step=1
+  local total_steps=5
 
   # Step 1: Config initialization
-  printf 'Step %d/4: Configuration\n' "$step"
+  printf 'Step %d/%d: Configuration\n' "$step" "$total_steps"
   printf '------------------------\n'
   _onboard_config
   step=$((step + 1))
   printf '\n'
 
   # Step 2: API key setup
-  printf 'Step %d/4: API Key\n' "$step"
+  printf 'Step %d/%d: API Key\n' "$step" "$total_steps"
   printf '-----------------\n'
   _onboard_api_key
   step=$((step + 1))
   printf '\n'
 
   # Step 3: Channel setup
-  printf 'Step %d/4: Channel Setup\n' "$step"
+  printf 'Step %d/%d: Channel Setup\n' "$step" "$total_steps"
   printf '----------------------\n'
   _onboard_channel
   step=$((step + 1))
   printf '\n'
 
   # Step 4: Gateway token
-  printf 'Step %d/4: Gateway\n' "$step"
+  printf 'Step %d/%d: Gateway\n' "$step" "$total_steps"
   printf '-----------------\n'
   _onboard_gateway
+  step=$((step + 1))
+  printf '\n'
+
+  # Step 5: Daemon installation
+  printf 'Step %d/%d: Daemon Setup\n' "$step" "$total_steps"
+  printf '---------------------\n'
+  _onboard_daemon
   printf '\n'
 
   printf 'Setup complete!\n'
   printf 'Run "bashclaw gateway" to start the server.\n'
   printf 'Run "bashclaw agent -i" for interactive mode.\n'
+  printf 'Run "bashclaw daemon status" to check the service.\n'
 }
 
 _onboard_config() {
@@ -65,6 +74,7 @@ _onboard_api_key() {
   # Check existing
   if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
     printf 'ANTHROPIC_API_KEY is already set in environment.\n'
+    _onboard_verify_api_key "anthropic" "$ANTHROPIC_API_KEY"
     return 0
   fi
 
@@ -91,6 +101,15 @@ _onboard_api_key() {
         log_warn "No API key provided, skipping"
         return 0
       fi
+      if ! _onboard_verify_api_key "anthropic" "$api_key"; then
+        printf 'Save this key anyway? [y/N]: '
+        local save_anyway
+        read -r save_anyway
+        if [[ "$save_anyway" != "y" && "$save_anyway" != "Y" ]]; then
+          printf 'API key not saved.\n'
+          return 0
+        fi
+      fi
       printf 'ANTHROPIC_API_KEY=%s\n' "$api_key" >> "$env_file"
       chmod 600 "$env_file"
       printf 'API key saved to %s\n' "$env_file"
@@ -104,6 +123,15 @@ _onboard_api_key() {
         log_warn "No API key provided, skipping"
         return 0
       fi
+      if ! _onboard_verify_api_key "openai" "$api_key"; then
+        printf 'Save this key anyway? [y/N]: '
+        local save_anyway
+        read -r save_anyway
+        if [[ "$save_anyway" != "y" && "$save_anyway" != "Y" ]]; then
+          printf 'API key not saved.\n'
+          return 0
+        fi
+      fi
       printf 'OPENAI_API_KEY=%s\n' "$api_key" >> "$env_file"
       chmod 600 "$env_file"
       config_set '.agents.defaults.model' '"gpt-4o"'
@@ -111,6 +139,66 @@ _onboard_api_key() {
       ;;
     *)
       log_warn "Invalid choice, skipping API key setup"
+      ;;
+  esac
+}
+
+_onboard_verify_api_key() {
+  local provider="$1"
+  local api_key="$2"
+
+  if ! is_command_available curl; then
+    printf 'Cannot verify API key (curl not available).\n'
+    return 0
+  fi
+
+  printf 'Verifying API key...'
+
+  case "$provider" in
+    anthropic)
+      local response
+      response="$(curl -sS --max-time 10 \
+        -H "x-api-key: ${api_key}" \
+        -H "anthropic-version: 2023-06-01" \
+        -H "content-type: application/json" \
+        -d '{"model":"claude-haiku-3-20250307","max_tokens":1,"messages":[{"role":"user","content":"hi"}]}' \
+        "https://api.anthropic.com/v1/messages" 2>/dev/null)" || {
+        printf ' failed (network error)\n'
+        return 1
+      }
+      local error_type
+      error_type="$(printf '%s' "$response" | jq -r '.error.type // empty' 2>/dev/null)"
+      if [[ -n "$error_type" && "$error_type" != "null" ]]; then
+        local error_msg
+        error_msg="$(printf '%s' "$response" | jq -r '.error.message // "unknown error"' 2>/dev/null)"
+        printf ' FAILED\n'
+        printf 'Error: %s\n' "$error_msg"
+        return 1
+      fi
+      printf ' OK\n'
+      return 0
+      ;;
+    openai)
+      local response
+      response="$(curl -sS --max-time 10 \
+        -H "Authorization: Bearer ${api_key}" \
+        "https://api.openai.com/v1/models" 2>/dev/null)" || {
+        printf ' failed (network error)\n'
+        return 1
+      }
+      local error_msg
+      error_msg="$(printf '%s' "$response" | jq -r '.error.message // empty' 2>/dev/null)"
+      if [[ -n "$error_msg" && "$error_msg" != "null" ]]; then
+        printf ' FAILED\n'
+        printf 'Error: %s\n' "$error_msg"
+        return 1
+      fi
+      printf ' OK\n'
+      return 0
+      ;;
+    *)
+      printf ' skipped (unknown provider)\n'
+      return 0
       ;;
   esac
 }
@@ -249,122 +337,31 @@ _onboard_gateway() {
   config_set '.gateway.auth.token' "\"${token}\""
   printf 'Gateway auth token generated: %s\n' "$token"
   printf 'Use this token in the Authorization header for API requests.\n'
+}
 
-  # Install as daemon?
-  printf '\nInstall as system service? [y/N]: '
-  read -r answer
-  if [[ "$answer" == "y" || "$answer" == "Y" ]]; then
-    onboard_install_daemon
+_onboard_daemon() {
+  printf 'Install bashclaw as a system service?\n'
+  printf 'This will start the gateway automatically on boot.\n\n'
+
+  local init_sys
+  init_sys="$(_detect_init_system)"
+  printf 'Detected init system: %s\n' "$init_sys"
+
+  if [[ "$init_sys" == "none" ]]; then
+    printf 'No supported init system found.\n'
+    printf 'Use "bashclaw gateway -d" to run as a background daemon.\n'
+    return 0
   fi
-}
 
-onboard_install_daemon() {
-  local os
-  os="$(uname -s)"
-
-  case "$os" in
-    Darwin)
-      _onboard_install_launchd
-      ;;
-    Linux)
-      _onboard_install_systemd
-      ;;
-    *)
-      printf 'Automatic daemon install not supported on %s.\n' "$os"
-      printf 'Use "bashclaw gateway -d" to run as daemon.\n'
-      ;;
-  esac
-}
-
-_onboard_install_launchd() {
-  local plist_dir="$HOME/Library/LaunchAgents"
-  local plist_file="${plist_dir}/com.bashclaw.gateway.plist"
-  local bashclaw_bin
-  bashclaw_bin="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/bashclaw"
-  local log_file="${BASHCLAW_STATE_DIR:?}/logs/gateway.log"
-
-  ensure_dir "$plist_dir"
-  ensure_dir "$(dirname "$log_file")"
-
-  cat > "$plist_file" <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.bashclaw.gateway</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>bash</string>
-        <string>${bashclaw_bin}</string>
-        <string>gateway</string>
-    </array>
-    <key>EnvironmentVariables</key>
-    <dict>
-        <key>BASHCLAW_STATE_DIR</key>
-        <string>${BASHCLAW_STATE_DIR}</string>
-    </dict>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <true/>
-    <key>StandardOutPath</key>
-    <string>${log_file}</string>
-    <key>StandardErrorPath</key>
-    <string>${log_file}</string>
-</dict>
-</plist>
-EOF
-
-  printf 'LaunchAgent plist created: %s\n' "$plist_file"
-  printf 'Load with: launchctl load %s\n' "$plist_file"
-  printf 'Unload with: launchctl unload %s\n' "$plist_file"
-
-  printf 'Load now? [y/N]: '
+  printf 'Install and enable? [y/N]: '
   local answer
   read -r answer
-  if [[ "$answer" == "y" || "$answer" == "Y" ]]; then
-    launchctl load "$plist_file" 2>/dev/null
-    printf 'LaunchAgent loaded.\n'
+
+  if [[ "$answer" != "y" && "$answer" != "Y" ]]; then
+    printf 'Skipping daemon setup.\n'
+    printf 'You can install later with: bashclaw daemon install --enable\n'
+    return 0
   fi
-}
 
-_onboard_install_systemd() {
-  local unit_dir="$HOME/.config/systemd/user"
-  local unit_file="${unit_dir}/bashclaw-gateway.service"
-  local bashclaw_bin
-  bashclaw_bin="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/bashclaw"
-
-  ensure_dir "$unit_dir"
-
-  cat > "$unit_file" <<EOF
-[Unit]
-Description=Bashclaw Gateway
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-ExecStart=bash ${bashclaw_bin} gateway
-Environment=BASHCLAW_STATE_DIR=${BASHCLAW_STATE_DIR}
-Restart=on-failure
-RestartSec=10
-
-[Install]
-WantedBy=default.target
-EOF
-
-  printf 'Systemd unit created: %s\n' "$unit_file"
-  printf 'Enable with: systemctl --user enable bashclaw-gateway\n'
-  printf 'Start with: systemctl --user start bashclaw-gateway\n'
-
-  printf 'Enable and start now? [y/N]: '
-  local answer
-  read -r answer
-  if [[ "$answer" == "y" || "$answer" == "Y" ]]; then
-    systemctl --user daemon-reload
-    systemctl --user enable bashclaw-gateway
-    systemctl --user start bashclaw-gateway
-    printf 'Systemd service enabled and started.\n'
-  fi
+  daemon_install "" "true"
 }

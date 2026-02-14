@@ -96,10 +96,10 @@ channel_discord_send() {
   while (( ${#remaining} > DISCORD_MAX_MESSAGE_LENGTH )); do
     local chunk="${remaining:0:$DISCORD_MAX_MESSAGE_LENGTH}"
     local split_pos=-1
-    local nl_pos
-    nl_pos="$(printf '%s' "$chunk" | grep -bo $'\n' | tail -1 | cut -d: -f1)"
-    if [[ -n "$nl_pos" && "$nl_pos" -gt 0 ]]; then
-      split_pos="$nl_pos"
+    # Find last newline in chunk using bash string ops (portable)
+    local _before="${chunk%$'\n'*}"
+    if [[ "$_before" != "$chunk" ]]; then
+      split_pos="${#_before}"
     fi
     if (( split_pos < 0 )); then
       split_pos=$DISCORD_MAX_MESSAGE_LENGTH
@@ -162,7 +162,7 @@ _DISCORD_LAST_MSG_DIR=""
 
 _discord_last_msg_init() {
   if [[ -z "$_DISCORD_LAST_MSG_DIR" ]]; then
-    _DISCORD_LAST_MSG_DIR="$(mktemp -d /tmp/bashclaw_discord_lm.XXXXXX)"
+    _DISCORD_LAST_MSG_DIR="$(mktemp -d -t bashclaw_discord.XXXXXX 2>/dev/null || mktemp -d /tmp/bashclaw_discord.XXXXXX)"
   fi
 }
 

@@ -109,10 +109,10 @@ channel_telegram_send() {
     local chunk="${remaining:0:$TELEGRAM_MAX_MESSAGE_LENGTH}"
     # Try to split at a newline boundary
     local split_pos=-1
-    local nl_pos
-    nl_pos="$(printf '%s' "$chunk" | grep -bo $'\n' | tail -1 | cut -d: -f1)"
-    if [[ -n "$nl_pos" && "$nl_pos" -gt 0 ]]; then
-      split_pos="$nl_pos"
+    # Find last newline in chunk using bash string ops (portable)
+    local _before="${chunk%$'\n'*}"
+    if [[ "$_before" != "$chunk" ]]; then
+      split_pos="${#_before}"
     fi
     if (( split_pos < 0 )); then
       split_pos=$TELEGRAM_MAX_MESSAGE_LENGTH
