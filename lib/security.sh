@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Security module for bashclaw
-# Audit logging, pairing codes, rate limiting, exec approval
+# Audit logging, pairing codes, rate limiting, exec approval,
+# tool policy, elevated policy, command auth (Gaps 9.1, 9.2, 9.3)
 
 # Append an audit event to the audit log (JSONL format)
 security_audit_log() {
@@ -102,8 +103,13 @@ security_pairing_code_verify() {
     return 1
   fi
 
-  # Code is valid, remove it (single use)
+  # Code is valid, remove it (single use) and mark as verified
   rm -f "$file"
+
+  local verified_dir="${pair_dir}/verified"
+  ensure_dir "$verified_dir"
+  printf '%s' "$(date +%s)" > "${verified_dir}/${safe_key}"
+
   security_audit_log "pairing_code_verified" "channel=$channel sender=$sender"
   return 0
 }
@@ -171,4 +177,164 @@ security_exec_approval() {
       return 0
       ;;
   esac
+}
+
+# ---- Tool Policy Check (Gap 9.1) ----
+# Check if a tool is allowed for the given agent and session type
+# Returns 0 if allowed, 1 if denied
+security_tool_policy_check() {
+  local agent_id="${1:?agent_id required}"
+  local tool_name="${2:?tool_name required}"
+  local session_type="${3:-main}"
+
+  require_command jq "security_tool_policy_check requires jq"
+
+  # Get agent-specific tool policy
+  local tools_allow
+  tools_allow="$(config_get_raw "(.agents.list // [] | map(select(.id == \"${agent_id}\")) | .[0].tools.allow // null)" 2>/dev/null)"
+  local tools_deny
+  tools_deny="$(config_get_raw "(.agents.list // [] | map(select(.id == \"${agent_id}\")) | .[0].tools.deny // null)" 2>/dev/null)"
+
+  # Fall back to defaults
+  if [[ "$tools_allow" == "null" || -z "$tools_allow" ]]; then
+    tools_allow="$(config_get_raw '.agents.defaults.tools.allow // null' 2>/dev/null)"
+  fi
+  if [[ "$tools_deny" == "null" || -z "$tools_deny" ]]; then
+    tools_deny="$(config_get_raw '.agents.defaults.tools.deny // null' 2>/dev/null)"
+  fi
+
+  # Check deny list first (deny takes precedence)
+  if [[ "$tools_deny" != "null" && -n "$tools_deny" ]]; then
+    local is_denied
+    is_denied="$(printf '%s' "$tools_deny" | jq --arg t "$tool_name" 'any(. == $t)' 2>/dev/null)"
+    if [[ "$is_denied" == "true" ]]; then
+      security_audit_log "tool_denied" "agent=$agent_id tool=$tool_name reason=deny_list"
+      return 1
+    fi
+  fi
+
+  # Check allow list (if set, only listed tools are allowed)
+  if [[ "$tools_allow" != "null" && -n "$tools_allow" ]]; then
+    local is_allowed
+    is_allowed="$(printf '%s' "$tools_allow" | jq --arg t "$tool_name" 'any(. == $t)' 2>/dev/null)"
+    if [[ "$is_allowed" != "true" ]]; then
+      security_audit_log "tool_denied" "agent=$agent_id tool=$tool_name reason=not_in_allow_list"
+      return 1
+    fi
+  fi
+
+  # Session-type restrictions for subagents
+  if [[ "$session_type" == "subagent" ]]; then
+    # Subagents get a restricted tool set
+    case "$tool_name" in
+      memory_store|memory_delete|cron_add|cron_remove|exec|shell)
+        security_audit_log "tool_denied" "agent=$agent_id tool=$tool_name reason=subagent_restricted"
+        return 1
+        ;;
+    esac
+  fi
+
+  # Cron sessions also have restrictions
+  if [[ "$session_type" == "cron" ]]; then
+    case "$tool_name" in
+      cron_add|cron_remove)
+        security_audit_log "tool_denied" "agent=$agent_id tool=$tool_name reason=cron_restricted"
+        return 1
+        ;;
+    esac
+  fi
+
+  return 0
+}
+
+# ---- Elevated Policy Check (Gap 9.1) ----
+# For tools/operations requiring elevated authorization
+# Returns "approved", "needs_approval", or "blocked"
+security_elevated_check() {
+  local tool_name="${1:?tool_name required}"
+  local sender="${2:-}"
+  local channel="${3:-}"
+
+  require_command jq "security_elevated_check requires jq"
+
+  # Elevated tools that always require approval
+  case "$tool_name" in
+    exec|shell|write_file)
+      # Check if sender is in the elevated users list
+      local elevated_users
+      elevated_users="$(config_get_raw '.security.elevatedUsers // []' 2>/dev/null)"
+      if [[ "$elevated_users" != "null" && "$elevated_users" != "[]" && -n "$elevated_users" ]]; then
+        local is_elevated
+        is_elevated="$(printf '%s' "$elevated_users" | jq --arg s "$sender" 'any(. == $s)' 2>/dev/null)"
+        if [[ "$is_elevated" == "true" ]]; then
+          security_audit_log "elevated_approved" "tool=$tool_name sender=$sender"
+          printf 'approved'
+          return 0
+        fi
+      fi
+      security_audit_log "elevated_needs_approval" "tool=$tool_name sender=$sender"
+      printf 'needs_approval'
+      return 0
+      ;;
+    # Tools that are always blocked in non-elevated contexts
+    system_reset|config_write)
+      security_audit_log "elevated_blocked" "tool=$tool_name sender=$sender"
+      printf 'blocked'
+      return 1
+      ;;
+    *)
+      printf 'approved'
+      return 0
+      ;;
+  esac
+}
+
+# ---- Command Authorization Check (Gap 9.3) ----
+# Check if a sender is authorized to execute a named command
+# Returns 0 if authorized, 1 if not
+security_command_auth_check() {
+  local command_name="${1:?command_name required}"
+  local sender="${2:-}"
+
+  require_command jq "security_command_auth_check requires jq"
+
+  # Check command-specific authorization
+  local cmd_auth
+  cmd_auth="$(config_get_raw ".security.commands.\"${command_name}\" // null" 2>/dev/null)"
+
+  if [[ "$cmd_auth" == "null" || -z "$cmd_auth" ]]; then
+    # No specific auth required for this command
+    return 0
+  fi
+
+  # Check if command requires specific role or user
+  local required_role
+  required_role="$(printf '%s' "$cmd_auth" | jq -r '.requiredRole // empty' 2>/dev/null)"
+  local allowed_users
+  allowed_users="$(printf '%s' "$cmd_auth" | jq '.allowedUsers // []' 2>/dev/null)"
+
+  # Check allowed users
+  if [[ "$allowed_users" != "[]" && -n "$allowed_users" ]]; then
+    local user_match
+    user_match="$(printf '%s' "$allowed_users" | jq --arg s "$sender" 'any(. == $s)' 2>/dev/null)"
+    if [[ "$user_match" == "true" ]]; then
+      return 0
+    fi
+  fi
+
+  # Check role-based access
+  if [[ -n "$required_role" ]]; then
+    local user_roles
+    user_roles="$(config_get_raw ".security.userRoles.\"${sender}\" // []" 2>/dev/null)"
+    if [[ "$user_roles" != "[]" && -n "$user_roles" ]]; then
+      local has_role
+      has_role="$(printf '%s' "$user_roles" | jq --arg r "$required_role" 'any(. == $r)' 2>/dev/null)"
+      if [[ "$has_role" == "true" ]]; then
+        return 0
+      fi
+    fi
+  fi
+
+  security_audit_log "command_auth_denied" "command=$command_name sender=$sender"
+  return 1
 }

@@ -1,6 +1,48 @@
 #!/usr/bin/env bash
 # Boot automation module for bashclaw
 # Parses BOOT.md files and executes startup instructions
+# Extended with agent workspace integration (Gap 13.1)
+
+# ---- Agent Workspace Boot Discovery (Gap 13.1) ----
+
+# Find BOOT.md for a specific agent in the standard workspace location
+boot_find() {
+  local agent_id="${1:?agent_id required}"
+
+  local workspace="${BASHCLAW_STATE_DIR:?}/agents/${agent_id}"
+  local boot_file="${workspace}/BOOT.md"
+
+  if [[ -f "$boot_file" ]]; then
+    printf '%s' "$boot_file"
+    return 0
+  fi
+
+  return 1
+}
+
+# Auto-boot on first agent start if BOOT.md exists and not already completed
+boot_auto() {
+  local agent_id="${1:?agent_id required}"
+
+  local boot_file
+  boot_file="$(boot_find "$agent_id" 2>/dev/null)" || return 0
+
+  # Check if boot already completed for this agent
+  local status_file="${BASHCLAW_STATE_DIR:?}/agents/${agent_id}/boot_status.json"
+  if [[ -f "$status_file" ]]; then
+    local status
+    status="$(jq -r '.status // "none"' < "$status_file" 2>/dev/null)"
+    if [[ "$status" == "completed" || "$status" == "completed_with_errors" ]]; then
+      log_debug "Boot already completed for agent=$agent_id"
+      return 0
+    fi
+  fi
+
+  log_info "Auto-boot triggered for agent=$agent_id"
+  local workspace
+  workspace="$(dirname "$boot_file")"
+  boot_run "$workspace"
+}
 
 # Run boot sequence for a workspace directory
 # Looks for BOOT.md, parses it, and executes code blocks via agent
@@ -21,13 +63,13 @@ boot_run() {
   log_info "Boot: processing $boot_file"
 
   # Update boot status
-  _boot_set_status "running" "$boot_file"
+  _boot_set_status "running" "$boot_file" "" "$workspace_dir"
 
   local blocks
   blocks="$(boot_parse_md "$boot_file")"
   if [[ -z "$blocks" || "$blocks" == "[]" ]]; then
     log_info "Boot: no executable blocks found in BOOT.md"
-    _boot_set_status "completed" "$boot_file" "no blocks"
+    _boot_set_status "completed" "$boot_file" "no blocks" "$workspace_dir"
     return 0
   fi
 
@@ -68,12 +110,12 @@ boot_run() {
   done
 
   if (( errors > 0 )); then
-    _boot_set_status "completed_with_errors" "$boot_file" "$errors errors"
+    _boot_set_status "completed_with_errors" "$boot_file" "$errors errors" "$workspace_dir"
     log_warn "Boot completed with $errors error(s)"
     return 1
   fi
 
-  _boot_set_status "completed" "$boot_file"
+  _boot_set_status "completed" "$boot_file" "" "$workspace_dir"
   log_info "Boot: completed successfully ($count blocks)"
 }
 
@@ -144,7 +186,15 @@ ${line}"
 
 # Check current boot status
 boot_status() {
-  local status_file="${BASHCLAW_STATE_DIR:?}/boot_status.json"
+  local agent_id="${1:-}"
+
+  local status_file
+  if [[ -n "$agent_id" ]]; then
+    status_file="${BASHCLAW_STATE_DIR:?}/agents/${agent_id}/boot_status.json"
+  else
+    status_file="${BASHCLAW_STATE_DIR:?}/boot_status.json"
+  fi
+
   if [[ -f "$status_file" ]]; then
     cat "$status_file"
   else
@@ -154,7 +204,15 @@ boot_status() {
 
 # Clear boot state
 boot_reset() {
-  local status_file="${BASHCLAW_STATE_DIR:?}/boot_status.json"
+  local agent_id="${1:-}"
+
+  local status_file
+  if [[ -n "$agent_id" ]]; then
+    status_file="${BASHCLAW_STATE_DIR:?}/agents/${agent_id}/boot_status.json"
+  else
+    status_file="${BASHCLAW_STATE_DIR:?}/boot_status.json"
+  fi
+
   if [[ -f "$status_file" ]]; then
     rm -f "$status_file"
     log_info "Boot status reset"
@@ -166,12 +224,22 @@ _boot_set_status() {
   local status="$1"
   local boot_file="${2:-}"
   local detail="${3:-}"
+  local workspace_dir="${4:-}"
 
   require_command jq "_boot_set_status requires jq"
 
-  local status_file="${BASHCLAW_STATE_DIR:?}/boot_status.json"
+  # Determine status file location
+  local status_file
+  if [[ -n "$workspace_dir" && -d "$workspace_dir" ]]; then
+    status_file="${workspace_dir}/boot_status.json"
+  else
+    status_file="${BASHCLAW_STATE_DIR:?}/boot_status.json"
+  fi
+
   local now
   now="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+
+  ensure_dir "$(dirname "$status_file")"
 
   jq -nc \
     --arg s "$status" \

@@ -145,4 +145,134 @@ assert_eq "$s1" "true"
 assert_eq "$s2" "true"
 teardown_test_env
 
+# ---- hooks_register with priority ordering ----
+
+test_start "hooks_register with priority ordering"
+setup_test_env
+_source_libs
+hook1="${BASHCLAW_STATE_DIR}/pri_hook1.sh"
+hook2="${BASHCLAW_STATE_DIR}/pri_hook2.sh"
+cat > "$hook1" <<'HOOKEOF'
+#!/usr/bin/env bash
+input="$(cat)"
+printf '%s' "$input" | jq -c '.order = (.order // "") + "first,"'
+HOOKEOF
+cat > "$hook2" <<'HOOKEOF'
+#!/usr/bin/env bash
+input="$(cat)"
+printf '%s' "$input" | jq -c '.order = (.order // "") + "second,"'
+HOOKEOF
+chmod +x "$hook1" "$hook2"
+hooks_register "low_pri" "pre_message" "$hook1" --priority 10
+hooks_register "high_pri" "pre_message" "$hook2" --priority 50
+result="$(hooks_run "pre_message" '{}' 2>/dev/null)"
+order="$(printf '%s' "$result" | jq -r '.order // empty')"
+assert_contains "$order" "first,"
+assert_contains "$order" "second,"
+teardown_test_env
+
+# ---- hooks_register validates event names ----
+
+test_start "hooks_register rejects invalid event name"
+setup_test_env
+_source_libs
+hook_script="${BASHCLAW_STATE_DIR}/bad_event.sh"
+printf '#!/usr/bin/env bash\necho ok\n' > "$hook_script"
+chmod +x "$hook_script"
+set +e
+hooks_register "bad" "invalid_event_name" "$hook_script" 2>/dev/null
+rc=$?
+set -e
+assert_ne "$rc" "0"
+teardown_test_env
+
+# ---- hooks_register validates strategy ----
+
+test_start "hooks_register rejects invalid strategy"
+setup_test_env
+_source_libs
+hook_script="${BASHCLAW_STATE_DIR}/bad_strat.sh"
+printf '#!/usr/bin/env bash\necho ok\n' > "$hook_script"
+chmod +x "$hook_script"
+set +e
+hooks_register "bad_strat" "pre_message" "$hook_script" --strategy "invalid" 2>/dev/null
+rc=$?
+set -e
+assert_ne "$rc" "0"
+teardown_test_env
+
+# ---- hooks_remove deletes a hook ----
+
+test_start "hooks_remove deletes a hook"
+setup_test_env
+_source_libs
+hook_script="${BASHCLAW_STATE_DIR}/rm_hook.sh"
+printf '#!/usr/bin/env bash\necho removed\n' > "$hook_script"
+chmod +x "$hook_script"
+hooks_register "removable" "pre_message" "$hook_script"
+hooks_remove "removable"
+hooks_dir="${BASHCLAW_STATE_DIR}/hooks"
+assert_file_not_exists "${hooks_dir}/removable.json"
+teardown_test_env
+
+# ---- hooks_count returns correct count ----
+
+test_start "hooks_count returns correct count"
+setup_test_env
+_source_libs
+h1="${BASHCLAW_STATE_DIR}/cnt1.sh"
+h2="${BASHCLAW_STATE_DIR}/cnt2.sh"
+h3="${BASHCLAW_STATE_DIR}/cnt3.sh"
+printf '#!/usr/bin/env bash\n:' > "$h1"
+printf '#!/usr/bin/env bash\n:' > "$h2"
+printf '#!/usr/bin/env bash\n:' > "$h3"
+chmod +x "$h1" "$h2" "$h3"
+hooks_register "cnt1" "pre_message" "$h1"
+hooks_register "cnt2" "pre_message" "$h2"
+hooks_register "cnt3" "post_message" "$h3"
+pre_count="$(hooks_count "pre_message")"
+assert_eq "$pre_count" "2"
+post_count="$(hooks_count "post_message")"
+assert_eq "$post_count" "1"
+teardown_test_env
+
+# ---- hooks_list_by_event filters correctly ----
+
+test_start "hooks_list_by_event filters correctly"
+setup_test_env
+_source_libs
+h1="${BASHCLAW_STATE_DIR}/ev1.sh"
+h2="${BASHCLAW_STATE_DIR}/ev2.sh"
+printf '#!/usr/bin/env bash\n:' > "$h1"
+printf '#!/usr/bin/env bash\n:' > "$h2"
+chmod +x "$h1" "$h2"
+hooks_register "ev1" "pre_tool" "$h1"
+hooks_register "ev2" "post_tool" "$h2"
+result="$(hooks_list_by_event "pre_tool")"
+assert_json_valid "$result"
+count="$(printf '%s' "$result" | jq 'length')"
+assert_eq "$count" "1"
+name="$(printf '%s' "$result" | jq -r '.[0].name')"
+assert_eq "$name" "ev1"
+teardown_test_env
+
+# ---- hooks_load_dir loads hooks from directory ----
+
+test_start "hooks_load_dir loads hooks from directory"
+setup_test_env
+_source_libs
+hook_dir="${BASHCLAW_STATE_DIR}/hook_scripts"
+mkdir -p "$hook_dir"
+cat > "${hook_dir}/my_hook.sh" <<'HOOKEOF'
+#!/usr/bin/env bash
+# hook:pre_message
+# priority:5
+echo "loaded from dir"
+HOOKEOF
+chmod +x "${hook_dir}/my_hook.sh"
+hooks_load_dir "$hook_dir"
+count="$(hooks_count "pre_message")"
+assert_ge "$count" 1
+teardown_test_env
+
 report_results

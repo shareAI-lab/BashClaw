@@ -116,13 +116,16 @@ setup_test_env
 cat > "$BASHCLAW_CONFIG" <<'EOF'
 {
   "channels": {
-    "telegram": {"allowFrom": ["user1", "user2"]}
+    "telegram": {
+      "dmPolicy": {"policy": "allowlist", "allowFrom": ["user1", "user2"]},
+      "allowFrom": ["user1", "user2"]
+    }
   }
 }
 EOF
 _CONFIG_CACHE=""
 config_load
-if routing_check_allowlist "telegram" "hacker"; then
+if routing_check_allowlist "telegram" "hacker" "true"; then
   _test_fail "unlisted sender should be rejected"
 else
   _test_pass

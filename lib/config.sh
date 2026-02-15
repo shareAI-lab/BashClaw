@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Configuration management for bashclaw (jq-based)
+# Extended with heartbeat, dmScope, tools policy, channel policies (Gaps 12.1, 12.2)
 
 _CONFIG_CACHE=""
 _CONFIG_PATH=""
@@ -134,22 +135,68 @@ config_init_default() {
   cat > "$path" <<ENDJSON
 {
   "agents": {
+    "defaultId": "main",
     "defaults": {
       "model": "${model}",
       "maxTurns": 50,
-      "contextTokens": 200000
+      "contextTokens": 200000,
+      "dmScope": "per-channel-peer",
+      "queueMode": "followup",
+      "queueDebounceMs": 0,
+      "fallbackModels": [],
+      "tools": {
+        "allow": [],
+        "deny": []
+      },
+      "heartbeat": {
+        "enabled": false,
+        "interval": "30m",
+        "activeHours": {
+          "start": "08:00",
+          "end": "22:00"
+        },
+        "timezone": "local",
+        "showAlerts": true
+      }
     },
     "list": []
   },
-  "channels": {},
+  "channels": {
+    "defaults": {
+      "dmPolicy": {
+        "policy": "open",
+        "allowFrom": []
+      },
+      "groupPolicy": {
+        "policy": "open"
+      },
+      "debounceMs": 0,
+      "threadAware": false,
+      "capabilities": {
+        "polls": false,
+        "reactions": false,
+        "edit": false
+      },
+      "outbound": {
+        "textChunkLimit": 4096
+      }
+    }
+  },
+  "bindings": [],
+  "identityLinks": [],
   "gateway": {
     "port": 18789,
     "auth": {}
   },
   "session": {
-    "scope": "per-sender",
+    "dmScope": "per-channel-peer",
     "idleResetMinutes": 30,
     "maxHistory": 200
+  },
+  "security": {
+    "elevatedUsers": [],
+    "commands": {},
+    "userRoles": {}
   },
   "meta": {
     "lastTouchedVersion": "${BASHCLAW_VERSION:-1.0.0}",
@@ -204,6 +251,21 @@ config_agent_get() {
   fi
 }
 
+# Get a nested agent config field using a jq path expression
+config_agent_get_raw() {
+  local agent_id="$1"
+  local jq_path="$2"
+  _config_ensure_loaded
+
+  local value
+  value="$(printf '%s' "$_CONFIG_CACHE" | jq -r \
+    --arg id "$agent_id" \
+    "(.agents.list // [] | map(select(.id == \$id)) | .[0] | ${jq_path} // null) // (.agents.defaults | ${jq_path} // null)" \
+    2>/dev/null)"
+
+  printf '%s' "$value"
+}
+
 config_channel_get() {
   local channel_id="$1"
   local field="$2"
@@ -221,6 +283,21 @@ config_channel_get() {
   else
     printf '%s' "$(config_env_substitute "$value")"
   fi
+}
+
+# Get raw channel config (for nested objects)
+config_channel_get_raw() {
+  local channel_id="$1"
+  local jq_path="$2"
+  _config_ensure_loaded
+
+  local value
+  value="$(printf '%s' "$_CONFIG_CACHE" | jq \
+    --arg ch "$channel_id" \
+    ".channels[\$ch] | ${jq_path} // (.channels.defaults | ${jq_path} // null)" \
+    2>/dev/null)"
+
+  printf '%s' "$value"
 }
 
 config_reload() {

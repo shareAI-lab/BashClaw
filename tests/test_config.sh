@@ -81,8 +81,8 @@ config_load
 val="$(config_get '.gateway.port')"
 assert_eq "$val" "18789"
 
-val="$(config_get '.session.scope')"
-assert_eq "$val" "per-sender"
+val="$(config_get '.session.dmScope')"
+assert_eq "$val" "per-channel-peer"
 
 val="$(config_get '.session.idleResetMinutes')"
 assert_eq "$val" "30"

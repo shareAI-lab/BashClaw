@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Long-term memory module for bashclaw
 # File-based key-value store with tags, sources, and access tracking
+# Extended with workspace memory, daily logs, BM25-style search (Gap 2.5)
 
 # Returns the memory storage directory
 memory_dir() {
@@ -14,6 +15,52 @@ _memory_key_to_filename() {
   local key="$1"
   printf '%s' "$key" | tr -c '[:alnum:]._-' '_' | head -c 200
 }
+
+# ---- Workspace Memory (Gap 2.5) ----
+
+# Ensure the agent workspace memory directory exists
+memory_ensure_workspace() {
+  local agent_id="${1:?agent_id required}"
+
+  local workspace="${BASHCLAW_STATE_DIR:?}/agents/${agent_id}/memory"
+  ensure_dir "$workspace"
+
+  # Initialize MEMORY.md if absent
+  local memory_md="${BASHCLAW_STATE_DIR}/agents/${agent_id}/MEMORY.md"
+  if [[ ! -f "$memory_md" ]]; then
+    printf '# Memory\n\nCurated memory for agent: %s\n' "$agent_id" > "$memory_md"
+    log_debug "Initialized MEMORY.md for agent=$agent_id"
+  fi
+
+  printf '%s' "$workspace"
+}
+
+# Append content to today's daily log
+memory_append_daily() {
+  local agent_id="${1:?agent_id required}"
+  local content="${2:?content required}"
+
+  local workspace
+  workspace="$(memory_ensure_workspace "$agent_id")"
+
+  local today
+  today="$(date -u '+%Y-%m-%d')"
+  local daily_file="${workspace}/${today}.md"
+
+  # Create header if new file
+  if [[ ! -f "$daily_file" ]]; then
+    printf '# Daily Log: %s\n\n' "$today" > "$daily_file"
+  fi
+
+  # Append with timestamp
+  local now
+  now="$(date -u '+%H:%M:%S')"
+  printf '\n## %s\n\n%s\n' "$now" "$content" >> "$daily_file"
+
+  log_debug "Memory daily append: agent=$agent_id date=$today"
+}
+
+# ---- KV Store ----
 
 # Store a value with optional tags and source
 # Usage: memory_store KEY VALUE [--tags tag1,tag2] [--source SOURCE]
@@ -99,28 +146,133 @@ memory_get() {
   printf '%s' "$content" | jq -r '.value'
 }
 
-# Search across all memory files for entries matching a query
-# Returns matching entries as JSON lines
+# ---- BM25-Style Search (Gap 2.5) ----
+
+# Search across all memory files with relevance scoring
+# Returns matching entries as JSON with scores
 memory_search() {
   local query="${1:?query required}"
+  local max_results="${2:-10}"
 
   require_command jq "memory_search requires jq"
 
   local dir
   dir="$(memory_dir)"
   local results="[]"
-  local f
 
+  # Split query into terms for BM25-style scoring
+  local query_lower
+  query_lower="$(printf '%s' "$query" | tr '[:upper:]' '[:lower:]')"
+
+  # Search JSON KV files
+  local f
   for f in "${dir}"/*.json; do
     [[ -f "$f" ]] || continue
     if grep -qi "$query" "$f" 2>/dev/null; then
       local entry
       entry="$(cat "$f")"
-      results="$(printf '%s' "$results" | jq --argjson e "$entry" '. + [$e]')"
+      local score
+      score="$(_memory_score_entry "$entry" "$query_lower")"
+      results="$(printf '%s' "$results" | jq --argjson e "$entry" --argjson s "$score" \
+        '. + [$e + {score: $s}]')"
     fi
   done
 
-  printf '%s' "$results"
+  # Search markdown memory files (agent workspaces)
+  local agents_dir="${BASHCLAW_STATE_DIR:?}/agents"
+  if [[ -d "$agents_dir" ]]; then
+    local agent_dir
+    for agent_dir in "${agents_dir}"/*/; do
+      [[ -d "$agent_dir" ]] || continue
+      local agent_id
+      agent_id="$(basename "$agent_dir")"
+
+      # Search MEMORY.md
+      local memory_md="${agent_dir}MEMORY.md"
+      if [[ -f "$memory_md" ]] && grep -qi "$query" "$memory_md" 2>/dev/null; then
+        local snippet
+        snippet="$(grep -i "$query" "$memory_md" 2>/dev/null | head -5)"
+        local md_score
+        md_score="$(_memory_score_text "$snippet" "$query_lower")"
+        results="$(printf '%s' "$results" | jq \
+          --arg k "md:${agent_id}:MEMORY" \
+          --arg v "$snippet" \
+          --arg src "$memory_md" \
+          --argjson s "$md_score" \
+          '. + [{key: $k, value: $v, source: $src, score: $s, tags: ["markdown","curated"]}]')"
+      fi
+
+      # Search daily log files
+      local md_file
+      for md_file in "${agent_dir}memory/"*.md; do
+        [[ -f "$md_file" ]] || continue
+        if grep -qi "$query" "$md_file" 2>/dev/null; then
+          local md_snippet
+          md_snippet="$(grep -i "$query" "$md_file" 2>/dev/null | head -5)"
+          local daily_score
+          daily_score="$(_memory_score_text "$md_snippet" "$query_lower")"
+          local md_basename
+          md_basename="$(basename "$md_file")"
+          results="$(printf '%s' "$results" | jq \
+            --arg k "md:${agent_id}:${md_basename}" \
+            --arg v "$md_snippet" \
+            --arg src "$md_file" \
+            --argjson s "$daily_score" \
+            '. + [{key: $k, value: $v, source: $src, score: $s, tags: ["markdown","daily"]}]')"
+        fi
+      done
+    done
+  fi
+
+  # Sort by score descending and limit results
+  printf '%s' "$results" | jq --argjson limit "$max_results" \
+    'sort_by(-.score) | .[:$limit]'
+}
+
+# BM25-style relevance scoring for a JSON entry
+_memory_score_entry() {
+  local entry="$1"
+  local query_lower="$2"
+
+  local text
+  text="$(printf '%s' "$entry" | jq -r '(.key // "") + " " + (.value // "")' 2>/dev/null)"
+  _memory_score_text "$text" "$query_lower"
+}
+
+# BM25-inspired term frequency scoring
+_memory_score_text() {
+  local text="$1"
+  local query_lower="$2"
+
+  local text_lower
+  text_lower="$(printf '%s' "$text" | tr '[:upper:]' '[:lower:]')"
+
+  local score=0
+  local term
+  for term in $query_lower; do
+    [[ -z "$term" ]] && continue
+    # Count occurrences (term frequency)
+    local count=0
+    local tmp="$text_lower"
+    while [[ "$tmp" == *"$term"* ]]; do
+      count=$((count + 1))
+      tmp="${tmp#*"$term"}"
+    done
+
+    if [[ "$count" -gt 0 ]]; then
+      # BM25-style saturation: tf / (tf + k1), k1=1.2
+      # Using integer arithmetic: score += (count * 100) / (count + 1)
+      local tf_score=$(( (count * 100) / (count + 1) ))
+      score=$((score + tf_score))
+    fi
+  done
+
+  # Bonus for exact phrase match
+  if [[ "$text_lower" == *"$query_lower"* ]]; then
+    score=$((score + 50))
+  fi
+
+  printf '%s' "$score"
 }
 
 # List memory entries with optional pagination
@@ -239,11 +391,7 @@ memory_compact() {
   dir="$(memory_dir)"
   local removed=0
 
-  # Since filenames are derived from keys, true duplicates only happen
-  # if there are collision variants. Scan for entries and keep newest by updated_at.
-  local seen_keys=""
   local f
-
   for f in "${dir}"/*.json; do
     [[ -f "$f" ]] || continue
     local key

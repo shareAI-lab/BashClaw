@@ -29,6 +29,8 @@ Commands:
   memory      Manage persistent key-value memory
   cron        Manage scheduled jobs
   hooks       Manage event hooks
+  boot        Run or check agent boot sequence
+  security    Security policy and pairing management
   onboard     Interactive setup wizard
   status      Show system status
   doctor      Run diagnostics
@@ -94,7 +96,7 @@ _bashclaw() {
   COMPREPLY=()
   cur="${COMP_WORDS[COMP_CWORD]}"
   prev="${COMP_WORDS[COMP_CWORD-1]}"
-  commands="agent gateway daemon message config session memory cron hooks onboard status doctor update completion version help"
+  commands="agent gateway daemon message config session memory cron hooks boot security onboard status doctor update completion version help"
 
   case "$prev" in
     bashclaw)
@@ -124,6 +126,12 @@ _bashclaw() {
     hooks)
       COMPREPLY=($(compgen -W "list add remove enable disable test" -- "$cur"))
       ;;
+    boot)
+      COMPREPLY=($(compgen -W "run find status reset" -- "$cur"))
+      ;;
+    security)
+      COMPREPLY=($(compgen -W "pair-generate pair-verify tool-check elevated-check audit" -- "$cur"))
+      ;;
     message)
       COMPREPLY=($(compgen -W "send" -- "$cur"))
       ;;
@@ -152,6 +160,8 @@ _bashclaw() {
     'memory:Manage persistent memory'
     'cron:Manage scheduled jobs'
     'hooks:Manage event hooks'
+    'boot:Run or check agent boot sequence'
+    'security:Security policy and pairing management'
     'onboard:Interactive setup wizard'
     'status:Show system status'
     'doctor:Run diagnostics'
@@ -186,6 +196,12 @@ _bashclaw() {
           ;;
         hooks)
           _values 'subcommand' list add remove enable disable test
+          ;;
+        boot)
+          _values 'subcommand' run find status reset
+          ;;
+        security)
+          _values 'subcommand' pair-generate pair-verify tool-check elevated-check audit
           ;;
         message)
           _values 'subcommand' send
@@ -296,6 +312,95 @@ cmd_doctor() {
   fi
 }
 
+cmd_boot() {
+  local subcmd="${1:-status}"
+  shift || true
+
+  case "$subcmd" in
+    run)
+      local agent_id="${1:-main}"
+      boot_auto "$agent_id"
+      ;;
+    find)
+      local agent_id="${1:-main}"
+      local found
+      found="$(boot_find "$agent_id" 2>/dev/null)" && {
+        printf 'BOOT.md found: %s\n' "$found"
+      } || {
+        printf 'No BOOT.md found for agent: %s\n' "$agent_id"
+      }
+      ;;
+    status)
+      local agent_id="${1:-}"
+      boot_status "$agent_id"
+      ;;
+    reset)
+      local agent_id="${1:-}"
+      boot_reset "$agent_id"
+      ;;
+    *)
+      printf 'Usage: bashclaw boot <run|find|status|reset> [agent_id]\n'
+      ;;
+  esac
+}
+
+cmd_security() {
+  local subcmd="${1:-}"
+  shift || true
+
+  case "$subcmd" in
+    pair-generate)
+      local channel="${1:?channel required}"
+      local sender="${2:?sender required}"
+      local code
+      code="$(security_pairing_code_generate "$channel" "$sender")"
+      printf 'Pairing code: %s\n' "$code"
+      ;;
+    pair-verify)
+      local channel="${1:?channel required}"
+      local sender="${2:?sender required}"
+      local code="${3:?code required}"
+      if security_pairing_code_verify "$channel" "$sender" "$code"; then
+        printf 'Pairing verified.\n'
+      else
+        printf 'Pairing failed.\n'
+        return 1
+      fi
+      ;;
+    tool-check)
+      local agent_id="${1:?agent_id required}"
+      local tool_name="${2:?tool_name required}"
+      local session_type="${3:-main}"
+      if security_tool_policy_check "$agent_id" "$tool_name" "$session_type"; then
+        printf 'Tool allowed: %s for agent %s (session: %s)\n' "$tool_name" "$agent_id" "$session_type"
+      else
+        printf 'Tool denied: %s for agent %s (session: %s)\n' "$tool_name" "$agent_id" "$session_type"
+        return 1
+      fi
+      ;;
+    elevated-check)
+      local tool_name="${1:?tool_name required}"
+      local sender="${2:-}"
+      local channel="${3:-}"
+      local result
+      result="$(security_elevated_check "$tool_name" "$sender" "$channel")"
+      printf '%s\n' "$result"
+      ;;
+    audit)
+      local audit_file="${BASHCLAW_STATE_DIR}/logs/audit.jsonl"
+      if [[ -f "$audit_file" ]]; then
+        local lines="${1:-20}"
+        tail -n "$lines" "$audit_file"
+      else
+        printf 'No audit log found.\n'
+      fi
+      ;;
+    *)
+      printf 'Usage: bashclaw security <pair-generate|pair-verify|tool-check|elevated-check|audit> [args]\n'
+      ;;
+  esac
+}
+
 # Route to sub-commands
 main() {
   local cmd="${1:-}"
@@ -328,6 +433,12 @@ main() {
       ;;
     hooks)
       cmd_hooks "$@"
+      ;;
+    boot)
+      cmd_boot "$@"
+      ;;
+    security|sec)
+      cmd_security "$@"
       ;;
     onboard|setup)
       cmd_onboard "$@"

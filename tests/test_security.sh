@@ -156,4 +156,184 @@ else
 fi
 teardown_test_env
 
+# ---- security_tool_policy_check allows by default ----
+
+test_start "security_tool_policy_check allows by default"
+setup_test_env
+_source_libs
+cat > "$BASHCLAW_CONFIG" <<'EOF'
+{
+  "agents": {"defaults": {}, "list": []}
+}
+EOF
+_CONFIG_CACHE=""
+config_load
+if security_tool_policy_check "main" "memory" "main"; then
+  _test_pass
+else
+  _test_fail "tool should be allowed by default"
+fi
+teardown_test_env
+
+# ---- security_tool_policy_check blocks subagent restricted tools ----
+
+test_start "security_tool_policy_check blocks subagent restricted tools"
+setup_test_env
+_source_libs
+cat > "$BASHCLAW_CONFIG" <<'EOF'
+{
+  "agents": {"defaults": {}, "list": []}
+}
+EOF
+_CONFIG_CACHE=""
+config_load
+set +e
+security_tool_policy_check "main" "shell" "subagent" 2>/dev/null
+rc=$?
+set -e
+assert_ne "$rc" "0"
+teardown_test_env
+
+# ---- security_tool_policy_check blocks cron restricted tools ----
+
+test_start "security_tool_policy_check blocks cron restricted tools"
+setup_test_env
+_source_libs
+cat > "$BASHCLAW_CONFIG" <<'EOF'
+{
+  "agents": {"defaults": {}, "list": []}
+}
+EOF
+_CONFIG_CACHE=""
+config_load
+set +e
+security_tool_policy_check "main" "cron_add" "cron" 2>/dev/null
+rc=$?
+set -e
+assert_ne "$rc" "0"
+teardown_test_env
+
+# ---- security_elevated_check returns approved for normal tools ----
+
+test_start "security_elevated_check returns approved for normal tools"
+setup_test_env
+_source_libs
+cat > "$BASHCLAW_CONFIG" <<'EOF'
+{"security": {}}
+EOF
+_CONFIG_CACHE=""
+config_load
+result="$(security_elevated_check "memory" "user1" "telegram")"
+assert_eq "$result" "approved"
+teardown_test_env
+
+# ---- security_elevated_check returns needs_approval for exec tools ----
+
+test_start "security_elevated_check returns needs_approval for exec tools"
+setup_test_env
+_source_libs
+cat > "$BASHCLAW_CONFIG" <<'EOF'
+{"security": {"elevatedUsers": []}}
+EOF
+_CONFIG_CACHE=""
+config_load
+result="$(security_elevated_check "exec" "user1" "telegram")"
+assert_eq "$result" "needs_approval"
+teardown_test_env
+
+# ---- security_elevated_check approves elevated users ----
+
+test_start "security_elevated_check approves elevated users"
+setup_test_env
+_source_libs
+cat > "$BASHCLAW_CONFIG" <<'EOF'
+{"security": {"elevatedUsers": ["admin_user"]}}
+EOF
+_CONFIG_CACHE=""
+config_load
+result="$(security_elevated_check "shell" "admin_user" "telegram")"
+assert_eq "$result" "approved"
+teardown_test_env
+
+# ---- security_elevated_check blocks system_reset ----
+
+test_start "security_elevated_check blocks system_reset"
+setup_test_env
+_source_libs
+cat > "$BASHCLAW_CONFIG" <<'EOF'
+{"security": {}}
+EOF
+_CONFIG_CACHE=""
+config_load
+set +e
+result="$(security_elevated_check "system_reset" "user1" "")"
+rc=$?
+set -e
+assert_eq "$result" "blocked"
+teardown_test_env
+
+# ---- security_command_auth_check allows when no auth config ----
+
+test_start "security_command_auth_check allows when no auth config"
+setup_test_env
+_source_libs
+cat > "$BASHCLAW_CONFIG" <<'EOF'
+{"security": {"commands": {}}}
+EOF
+_CONFIG_CACHE=""
+config_load
+if security_command_auth_check "status" "anyone"; then
+  _test_pass
+else
+  _test_fail "should allow when no auth config"
+fi
+teardown_test_env
+
+# ---- security_command_auth_check denies unauthorized user ----
+
+test_start "security_command_auth_check denies unauthorized user"
+setup_test_env
+_source_libs
+cat > "$BASHCLAW_CONFIG" <<'EOF'
+{
+  "security": {
+    "commands": {
+      "deploy": {"allowedUsers": ["admin"]}
+    },
+    "userRoles": {}
+  }
+}
+EOF
+_CONFIG_CACHE=""
+config_load
+set +e
+security_command_auth_check "deploy" "random_user" 2>/dev/null
+rc=$?
+set -e
+assert_ne "$rc" "0"
+teardown_test_env
+
+# ---- security_command_auth_check allows authorized user ----
+
+test_start "security_command_auth_check allows authorized user"
+setup_test_env
+_source_libs
+cat > "$BASHCLAW_CONFIG" <<'EOF'
+{
+  "security": {
+    "commands": {
+      "deploy": {"allowedUsers": ["admin"]}
+    }
+  }
+}
+EOF
+_CONFIG_CACHE=""
+config_load
+if security_command_auth_check "deploy" "admin"; then
+  _test_pass
+else
+  _test_fail "authorized user should be allowed"
+fi
+teardown_test_env
+
 report_results
