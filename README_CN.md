@@ -1,33 +1,76 @@
-# bashclaw
+<div align="center">
+<pre>
+     _               _          _
+    | |__   __ _ ___| |__   ___| | __ ___      __
+    | '_ \ / _` / __| '_ \ / __| |/ _` \ \ /\ / /
+    | |_) | (_| \__ \ | | | (__| | (_| |\ V  V /
+    |_.__/ \__,_|___/_| |_|\___|_|\__,_| \_/\_/
+</pre>
 
-[OpenClaw](https://github.com/openclaw/openclaw) AI 助手平台的纯 Bash 重新实现。
+<h3>零依赖 AI 助手，Bash 在哪它就在哪。</h3>
 
-相同的架构、相同的模块流程、相同的功能 -- 零 Node.js、零 npm。只需 Bash + jq + curl。
+<p>纯 Bash + curl + jq。不需要 Node.js、Python、任何二进制文件。<br>
+与 <a href="https://github.com/openclaw/openclaw">OpenClaw</a> 同架构，99% 更轻量。</p>
 
-[English](README.md) | [Chinese](README_CN.md)
+<p>
+  <img src="https://img.shields.io/badge/bash-3.2%2B-4EAA25?logo=gnubash&logoColor=white" alt="Bash 3.2+" />
+  <img src="https://img.shields.io/badge/dependencies-jq%20%2B%20curl-blue" alt="Dependencies" />
+  <img src="https://img.shields.io/badge/tests-334%20passed-brightgreen" alt="Tests" />
+  <img src="https://img.shields.io/badge/memory-%3C%2010MB-purple" alt="Memory" />
+  <a href="https://opensource.org/licenses/MIT">
+    <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License" />
+  </a>
+</p>
 
-## 为什么
+<p>
+  <a href="#一键安装">安装</a> &middot;
+  <a href="#快速开始">快速开始</a> &middot;
+  <a href="#架构">架构</a> &middot;
+  <a href="#命令">命令</a> &middot;
+  <a href="README.md">English</a>
+</p>
+</div>
 
-OpenClaw 是一个用 TypeScript 编写的个人 AI 助手网关（约 20k 行代码），存在以下问题：
+---
 
-- 52 个 npm 依赖（包括 playwright、sharp、baileys 等重型依赖）
-- 启动时 40+ 个顺序初始化步骤
-- 234 个冗余的 `.strict()` Zod schema 调用
-- 6+ 次独立的配置验证
-- 每次请求都进行未缓存的头像解析（同步文件 I/O）
-- 跨越 800+ 行的复杂重试/回退逻辑
+## 为什么选择 bashclaw?
 
-**bashclaw** 完全消除了这些冗余：
+```sh
+# OpenClaw 需要这些:
+node >= 22, npm, 52 packages, playwright, sharp, 200-400MB RAM, 2-5s startup
 
-| 指标 | OpenClaw (TS) | bashclaw |
-|---|---|---|
-| 代码行数 | ~20,000+ | ~17,300 |
-| 依赖 | 52 个 npm 包 | jq, curl (socat 可选) |
-| 启动时间 | 2-5秒 (Node 冷启动) | <100毫秒 |
-| 内存占用 | 200-400MB | <10MB |
-| 配置验证 | 6 次 + Zod | 单次 jq 解析 |
-| 运行时 | Node.js 22+ | Bash 3.2+ |
-| 测试套件 | 未知 | 18 套件, 222 用例, 320 断言 |
+# bashclaw 只需要:
+bash >= 3.2, curl, jq
+# 你的机器上已经有了。
+```
+
+|                  | OpenClaw (TS)   | nanobot (Python)  | bashclaw          |
+|------------------|-----------------|-------------------|-------------------|
+| 运行时           | Node.js 22+     | Python 3.11+      | **Bash 3.2+**     |
+| 依赖             | 52 个 npm 包    | pip + 包          | **jq, curl**      |
+| 内存             | 200-400 MB      | 80-150 MB         | **< 10 MB**       |
+| 启动时间         | 2-5 秒          | 1-2 秒            | **< 100 ms**      |
+| 代码行数         | ~20,000+        | ~4,000            | **~17,300**       |
+| 安装             | npm/Docker      | pip/Docker        | **curl \| bash**  |
+| macOS 开箱即用   | 否 (需要 Node)  | 否 (需要 Python)  | **是**            |
+| Android Termux   | 复杂            | 复杂              | **pkg install jq** |
+| 测试覆盖         | 未知            | 未知              | **334 个测试**    |
+
+### Bash 3.2: 为什么重要
+
+```
+2006-10  Bash 3.2 发布 (Chet Ramey, Case Western Reserve University)
+2007-10  macOS Leopard 搭载 Bash 3.2 -- 此后每台 Mac 都有
+2009-02  Bash 4.0 发布 (新增关联数组、mapfile、|& 等特性)
+2019-06  macOS Catalina 将默认 shell 切换为 zsh
+2019-    Apple 将 /bin/bash 永久冻结在 3.2.57 (拒绝 GPLv3)
+2025     每台 Mac、每个 Linux、Android Termux -- 都有 Bash 3.2+
+```
+
+bashclaw 有意只用 3.2 特性: 不用 `declare -A`、不用 `mapfile`、不用 `|&`。
+这意味着它可以在**自 2007 年以来出货的每台 Mac** 上运行而无需 Homebrew，
+也可以在任何 Linux 发行版、Android Termux (无需 root)、Windows WSL、
+Alpine 容器和树莓派上运行。零编译。零二进制下载。
 
 ## 一键安装
 
@@ -35,171 +78,371 @@ OpenClaw 是一个用 TypeScript 编写的个人 AI 助手网关（约 20k 行�
 curl -fsSL https://raw.githubusercontent.com/shareAI-lab/bashclaw/main/install.sh | bash
 ```
 
-或手动克隆：
+或者克隆后直接运行 (零安装):
 
 ```sh
 git clone https://github.com/shareAI-lab/bashclaw.git
-cd bashclaw
-chmod +x bashclaw
+cd bashclaw && ./bashclaw doctor
 ```
 
-### 系统要求
+### 平台支持
 
-- **bash** 3.2+（macOS 默认版本即可，Linux、Android Termux 均可）
-- **jq** - JSON 处理（安装器会自动安装）
-- **curl** - HTTP 请求
-- **socat**（可选）- 网关 HTTP 服务器
-
-```sh
-# macOS
-brew install jq curl socat
-
-# Ubuntu/Debian
-apt install jq curl socat
-
-# Android (Termux, 无需 root)
-pkg install jq curl
-```
+| 平台                  | 方式                 | 状态                |
+|-----------------------|----------------------|---------------------|
+| macOS (Intel/Apple)   | curl 安装或 git      | 开箱即用            |
+| Ubuntu / Debian       | curl 安装或 git      | 开箱即用            |
+| Fedora / RHEL / Arch  | curl 安装或 git      | 开箱即用            |
+| Alpine Linux          | apk add bash jq curl | 可用                |
+| Windows (WSL2)        | curl 安装或 git      | 可用                |
+| Android (Termux)      | pkg install jq curl  | 可用, 无需 root     |
+| Raspberry Pi          | curl 安装或 git      | 可用 (< 10MB RAM)   |
+| Docker / CI           | git clone            | 可用                |
 
 ## 快速开始
 
 ```sh
-# 交互式设置向导
-./bashclaw onboard
+# 第 1 步: 设置 API 密钥
+export ANTHROPIC_API_KEY="sk-ant-..."
 
-# 或手动设置 API 密钥
-export ANTHROPIC_API_KEY="your-key"
+# 第 2 步: 聊天
+./bashclaw agent -m "太阳的质量是多少?"
 
-# 交互式聊天
+# 第 3 步: 交互模式
 ./bashclaw agent -i
+```
 
-# 发送单条消息
-./bashclaw agent -m "法国的首都是什么?"
+三条命令搞定。无需配置文件、无需向导、无需注册。
 
-# 检查系统健康状态
-./bashclaw doctor
+如需引导式设置 (含频道配置):
 
-# 安装为后台守护进程
-./bashclaw daemon install --enable
+```sh
+./bashclaw onboard
 ```
 
 ## 架构
 
-```sh
-bashclaw/
-  bashclaw                # 主入口和 CLI 路由 (472 行)
-  install.sh              # 独立安装器 (跨平台)
-  lib/
-    # -- 核心模块 --
-    log.sh                # 日志子系统 (级别、颜色、文件输出)
-    utils.sh              # 通用工具 (重试、端口检查、uuid、临时文件等)
-    config.sh             # 配置管理 (基于 jq、环境变量替换)
-    session.sh            # JSONL 会话持久化 (按发送者/频道/全局, 上下文压缩)
-    agent.sh              # Agent 运行时 (Anthropic/OpenAI API、工具循环、引导文件)
-    tools.sh              # 内置工具 (14 种: web、shell、memory、cron、文件等)
-    routing.sh            # 7 级优先级消息路由和分发
-    memory.sh             # 长期记忆 (基于文件的键值存储, 支持标签)
-
-    # -- 后台系统 --
-    heartbeat.sh          # 周期性自主 Agent 签到 (活跃时段门控)
-    events.sh             # 系统事件队列 (FIFO, 去重, 下轮排空)
-    cron.sh               # 高级定时任务 (at/every/cron 调度, 退避, 隔离会话)
-    process.sh            # 双层命令队列 (类型化通道, 并发控制)
-    daemon.sh             # 守护进程管理 (systemd/launchd/cron)
-
-    # -- 扩展系统 --
-    plugin.sh             # 插件系统 (发现、加载、注册工具/钩子/命令/提供者)
-    skills.sh             # 技能系统 (SKILL.md 提示级能力, 按 Agent)
-    dedup.sh              # 幂等性/去重缓存 (基于 TTL, 文件存储)
-    hooks.sh              # 14 事件钩子/中间件管道 (void/modifying/sync 策略)
-    boot.sh               # 启动自动化 (BOOT.md 解析, Agent 工作空间集成)
-    autoreply.sh          # 基于模式匹配的自动回复规则
-    security.sh           # 8 层安全 (审计、配对、限流、工具策略、提权、RBAC)
-
-    # -- CLI 命令 --
-    cmd_agent.sh          # CLI: agent 命令 (交互模式)
-    cmd_gateway.sh        # CLI: 网关服务器 (WebSocket/HTTP)
-    cmd_config.sh         # CLI: 配置管理
-    cmd_session.sh        # CLI: 会话管理
-    cmd_message.sh        # CLI: 发送消息
-    cmd_memory.sh         # CLI: 记忆管理
-    cmd_cron.sh           # CLI: 定时任务管理
-    cmd_hooks.sh          # CLI: 钩子管理
-    cmd_daemon.sh         # CLI: 守护进程管理
-    cmd_onboard.sh        # CLI: 设置向导
-
-  channels/
-    telegram.sh           # Telegram Bot API (长轮询)
-    discord.sh            # Discord Bot API (HTTP 轮询)
-    slack.sh              # Slack Bot API (会话轮询)
-  gateway/
-    http_handler.sh       # socat 网关的 HTTP 请求处理
-  tests/
-    framework.sh          # 测试框架 (断言、环境设置/清理)
-    test_*.sh             # 18 个测试套件, 222 个测试用例
-    run_all.sh            # 测试运行器 (单元、集成、兼容性模式)
-  .github/workflows/
-    ci.yml                # CI: 推送/PR 时运行单元+兼容性测试
-    integration.yml       # 集成测试 (每周+手动触发)
+```
+                          +------------------+
+                          |    CLI / 用户    |
+                          +--------+---------+
+                                   |
+                    +--------------+--------------+
+                    |        bashclaw (main)       |
+                    |    472 行, CLI 路由器        |
+                    +--------------+--------------+
+                                   |
+          +------------------------+------------------------+
+          |                        |                        |
+  +-------+-------+      +--------+--------+      +--------+--------+
+  |    频道模块    |      |    核心引擎      |      |   后台系统       |
+  +-------+-------+      +--------+--------+      +--------+--------+
+  | telegram.sh   |      | agent.sh         |      | heartbeat.sh    |
+  | discord.sh    |      | routing.sh       |      | cron.sh         |
+  | slack.sh      |      | session.sh       |      | events.sh       |
+  | (插件: 任意)  |      | tools.sh (14)    |      | process.sh      |
+  +---------------+      | memory.sh        |      | daemon.sh       |
+                          | config.sh        |      +-----------------+
+                          +------------------+
+                                   |
+          +------------------------+------------------------+
+          |                        |                        |
+  +-------+-------+      +--------+--------+      +--------+--------+
+  |   扩展系统     |      |    安全模块      |      |   CLI 命令       |
+  +-------+-------+      +--------+--------+      +--------+--------+
+  | plugin.sh      |      | 8 层安全模型     |      | cmd_agent.sh    |
+  | skills.sh      |      | SSRF 防护       |      | cmd_config.sh   |
+  | hooks.sh (14)  |      | 频率限制        |      | cmd_session.sh  |
+  | autoreply.sh   |      | RBAC + 审计     |      | cmd_cron.sh     |
+  | boot.sh        |      | 配对码          |      | cmd_daemon.sh   |
+  | dedup.sh       |      | 工具策略        |      | cmd_gateway.sh  |
+  +-----------------+      +-----------------+      | cmd_memory.sh   |
+                                                    | cmd_hooks.sh    |
+                                                    | cmd_onboard.sh  |
+                                                    | cmd_message.sh  |
+                                                    +-----------------+
 ```
 
-### 模块流程
+### 消息处理流程
+
+```
+用户消息
+  |
+  v
+去重检查 ---------> [重复?] --> 丢弃
+  |
+  v
+自动回复检查 -----> [模式匹配?] --> 即时回复
+  |
+  v
+钩子: pre_message (修改型管道)
+  |
+  v
+路由 (7 级优先级解析)
+  |  L1: 精确 peer 绑定
+  |  L2: 父级 peer (线程继承)
+  |  L3: guild 绑定
+  |  L4: channel 绑定
+  |  L5: team 绑定
+  |  L6: account 绑定
+  |  L7: 默认 agent
+  v
+安全门控
+  |  频率限制 --> [超限?] --> 节流
+  |  配对验证 --> [需要?] --> 挑战
+  |  工具策略 --> [拒绝?] --> 阻止
+  |  RBAC    --> [无角色?] --> 拒绝
+  v
+处理队列 (双层, 类型化通道)
+  |  main:     最大 4 个并发
+  |  cron:     最大 1 个并发
+  |  subagent: 最大 8 个并发
+  v
+事件注入 (排空排队的系统事件)
+  |
+  v
+Agent 运行时
+  |  1. 解析模型 + 提供者
+  |  2. 加载工作空间文件 (SOUL.md, MEMORY.md, ...)
+  |  3. 构建系统提示 (10 个段)
+  |  4. 从 JSONL 会话构建消息
+  |  5. API 调用 (Anthropic/OpenAI/Google/OpenRouter)
+  |  6. 工具循环 (最大 10 次迭代)
+  |  7. 5 级溢出降级:
+  |     L1: 减少历史
+  |     L2: 自动压缩 (3 次重试)
+  |     L3: 模型降级链
+  |     L4: 会话重置
+  v
+会话持久化 (JSONL 追加 + 修剪)
+  |
+  v
+钩子: post_message
+  |
+  v
+投递 (格式化, 拆分长消息, 发送)
+```
+
+### 后台系统
+
+```
+心跳循环 (可配置间隔)
+  |
+  +--> 活跃时段门控 (默认 08:00 - 22:00)
+  +--> 无活跃处理检查
+  +--> HEARTBEAT.md 提示注入
+  +--> 有意义的回复? --> 作为系统事件入队
+  +--> HEARTBEAT_OK?  --> 静默丢弃
+
+定时服务
+  |
+  +--> 调度类型: at (一次性) | every (间隔) | cron (5 字段)
+  +--> 失败时指数退避 (30s -> 60s -> 5m -> 15m -> 60m)
+  +--> 卡死任务检测 (2 小时阈值, 自动释放)
+  +--> 隔离会话 (避免污染主对话)
+
+启动自动化
+  |
+  +--> Agent 工作空间中的 BOOT.md
+  +--> 解析代码围栏块
+  +--> 执行: shell 命令或 agent 消息
+  +--> 每个块状态跟踪
+```
+
+## LLM 提供者
+
+bashclaw 支持 4 种提供者，自动检测和模型别名:
 
 ```sh
-频道 (Telegram/Discord/Slack/CLI)
-  -> 去重检查 (幂等性缓存, 跳过重复消息)
-  -> 自动回复检查 (模式匹配 -> 立即响应)
-  -> 钩子: pre_message (中间件管道)
-  -> 路由 (7 级优先级: 发送者/服务器/频道/团队 -> Agent 解析)
-    -> 安全 (8 层: 限流、配对、工具策略、提权、RBAC)
-    -> 处理队列 (双层: 类型化通道 + 每 Agent 并发控制)
-    -> 事件注入 (将排队的系统事件排空到消息上下文)
-    -> Agent 运行时 (模型选择、引导文件、API 调用、工具循环)
-      -> 钩子: pre_tool / post_tool
-      -> 工具 (web_fetch、web_search、shell、memory、cron、文件、message...)
-      -> 插件工具 (由已加载插件动态注册)
-    -> 会话 (JSONL 追加、修剪、上下文压缩、空闲重置)
-  -> 钩子: post_message
-  -> 投递 (格式化回复、拆分长消息、发送)
+# Anthropic (默认)
+export ANTHROPIC_API_KEY="sk-ant-..."
+bashclaw agent -m "你好"                            # 使用 claude-sonnet-4
 
-后台系统:
-  心跳循环   -> 活跃时段门控 -> HEARTBEAT.md 提示 -> Agent 轮次
-  定时服务   -> 调度检查 -> 隔离/主会话 -> 失败退避
-  事件队列   -> 后台入队 -> 下一轮 Agent 排空
+# OpenAI
+export OPENAI_API_KEY="sk-..."
+MODEL_ID=gpt-4o bashclaw agent -m "你好"
 
-启动自动化:
-  BOOT.md -> 解析代码块 -> 执行 (shell / agent 消息) -> 状态跟踪
+# Google Gemini
+export GOOGLE_API_KEY="..."
+MODEL_ID=gemini-2.0-flash bashclaw agent -m "你好"
 
-插件系统:
-  发现 (4 个来源) -> 加载 -> 注册 (工具、钩子、命令、提供者)
+# OpenRouter (任意模型)
+export OPENROUTER_API_KEY="sk-or-..."
+MODEL_ID=anthropic/claude-sonnet-4 bashclaw agent -m "你好"
 
-技能:
-  Agent 工作空间 -> SKILL.md 文件 -> 注入系统提示 -> 按需加载
+# 自定义 API 兼容端点
+export ANTHROPIC_BASE_URL=https://your-proxy.example.com
+bashclaw agent -m "你好"
+```
 
-守护进程:
-  systemd (Linux) / launchd (macOS) / cron (通用回退)
+模型别名快速切换:
+
+```sh
+MODEL_ID=fast     # -> gemini-2.0-flash
+MODEL_ID=smart    # -> claude-opus-4
+MODEL_ID=balanced # -> claude-sonnet-4
+MODEL_ID=cheap    # -> gpt-4o-mini
 ```
 
 ## 命令
 
 ```sh
-bashclaw agent [-m MSG] [-i] [-a AGENT]   # 与 agent 聊天
-bashclaw gateway [-p PORT] [-d] [--stop]   # 启动/停止网关
-bashclaw daemon [install|uninstall|status|logs|restart|stop]
-bashclaw message send -c CH -t TO -m MSG   # 发送到频道
-bashclaw config [show|get|set|init|validate|edit|path]
-bashclaw session [list|show|clear|delete|export]
-bashclaw memory [list|get|set|delete|search|export|import|compact|stats]
-bashclaw cron [list|add|remove|enable|disable|run|history]
-bashclaw hooks [list|add|remove|enable|disable|test]
-bashclaw boot [run|find|status|reset]      # Agent 启动自动化
+bashclaw agent    [-m MSG] [-i] [-a AGENT]   # 与 Agent 聊天
+bashclaw gateway  [-p PORT] [-d] [--stop]    # 启动/停止网关
+bashclaw daemon   [install|uninstall|status|logs|restart|stop]
+bashclaw message  send -c CH -t TO -m MSG    # 发送到频道
+bashclaw config   [show|get|set|init|validate|edit|path]
+bashclaw session  [list|show|clear|delete|export]
+bashclaw memory   [list|get|set|delete|search|export|import|compact|stats]
+bashclaw cron     [list|add|remove|enable|disable|run|history]
+bashclaw hooks    [list|add|remove|enable|disable|test]
+bashclaw boot     [run|find|status|reset]
 bashclaw security [pair-generate|pair-verify|tool-check|elevated-check|audit]
-bashclaw onboard                           # 交互式设置向导
-bashclaw status                            # 系统状态
-bashclaw doctor                            # 诊断问题
-bashclaw update                            # 更新到最新版本
-bashclaw completion [bash|zsh]             # Shell 补全
-bashclaw version                           # 版本信息
+bashclaw onboard                             # 交互式设置向导
+bashclaw status                              # 系统状态
+bashclaw doctor                              # 诊断问题
+bashclaw update                              # 更新到最新版本
+bashclaw completion [bash|zsh]               # Shell 补全
+```
+
+## 内置工具 (14 个)
+
+Agent 在对话中可以使用以下工具:
+
+| 工具 | 描述 | 权限等级 |
+|------|------|----------|
+| `web_fetch` | HTTP GET/POST, 带 SSRF 防护 | 无 |
+| `web_search` | 网页搜索 (Brave / Perplexity) | 无 |
+| `shell` | 执行命令 (安全过滤) | 需提权 |
+| `memory` | 持久化键值存储, 支持标签 | 无 |
+| `cron` | 调度定期任务 | 无 |
+| `message` | 发送消息到频道 | 无 |
+| `agents_list` | 列出可用 Agent | 无 |
+| `session_status` | 当前会话信息 | 无 |
+| `sessions_list` | 列出所有会话 | 无 |
+| `agent_message` | 发送消息给其他 Agent | 无 |
+| `read_file` | 读取文件内容 (行数限制) | 无 |
+| `write_file` | 写入内容到文件 | 需提权 |
+| `list_files` | 列出目录内容 | 无 |
+| `file_search` | 按模式搜索文件 | 无 |
+
+## 安全模型 (8 层)
+
+```
+Layer 1: SSRF 防护       -- web_fetch 阻止私有/内部 IP
+Layer 2: 命令过滤        -- 阻止 rm -rf /, fork 炸弹等
+Layer 3: 配对码          -- 6 位限时频道认证
+Layer 4: 频率限制        -- 每用户令牌桶 (可配置)
+Layer 5: 工具策略        -- 每 Agent 允许/拒绝列表
+Layer 6: 提权策略        -- 危险工具需要授权
+Layer 7: RBAC            -- 基于角色的命令授权
+Layer 8: 审计日志        -- 所有安全事件的 JSONL 记录
+```
+
+```sh
+# 生成配对码
+bashclaw security pair-generate telegram user123
+
+# 检查工具访问
+bashclaw security tool-check main shell main
+
+# 查看审计记录
+bashclaw security audit
+```
+
+## 频道设置
+
+### Telegram
+
+```sh
+bashclaw config set '.channels.telegram.botToken' '"YOUR_BOT_TOKEN"'
+bashclaw config set '.channels.telegram.enabled' 'true'
+bashclaw gateway    # 启动 Telegram 长轮询监听
+```
+
+### Discord
+
+```sh
+bashclaw config set '.channels.discord.botToken' '"YOUR_BOT_TOKEN"'
+bashclaw config set '.channels.discord.enabled' 'true'
+bashclaw gateway
+```
+
+### Slack
+
+```sh
+bashclaw config set '.channels.slack.botToken' '"xoxb-YOUR-TOKEN"'
+bashclaw config set '.channels.slack.enabled' 'true'
+bashclaw gateway
+```
+
+## 插件系统
+
+通过自定义工具、钩子、命令和 LLM 提供者扩展 bashclaw。
+
+```
+插件发现 (4 个来源):
+  1. ${BASHCLAW_ROOT}/extensions/     # 内置
+  2. ~/.bashclaw/extensions/          # 全局用户
+  3. .bashclaw/extensions/            # 工作空间本地
+  4. config: plugins.load.paths       # 自定义路径
+```
+
+每个插件有一个 `bashclaw.plugin.json` 清单和一个入口脚本:
+
+```sh
+# my-plugin/bashclaw.plugin.json
+{ "id": "my-plugin", "version": "1.0.0", "description": "My custom tool" }
+
+# my-plugin/init.sh
+plugin_register_tool "my_tool" "Does something" '{"input":{"type":"string"}}' "$PWD/handler.sh"
+plugin_register_hook "pre_message" "$PWD/filter.sh" 50
+plugin_register_command "my_cmd" "Custom command" "$PWD/cmd.sh"
+plugin_register_provider "my_llm" "My LLM" '["model-a"]' '{"envKey":"MY_KEY"}'
+```
+
+## 钩子系统 (14 个事件)
+
+```
+事件                  策略          触发时机
+-----                --------     ----
+pre_message          modifying    消息处理前 (可修改输入)
+post_message         void         消息处理后
+pre_tool             modifying    工具执行前 (可修改参数)
+post_tool            modifying    工具执行后 (可修改结果)
+on_error             void         发生错误时
+on_session_reset     void         会话重置时
+before_agent_start   sync         Agent 开始处理前
+agent_end            void         Agent 处理完成后
+before_compaction    sync         上下文压缩前
+after_compaction     void         上下文压缩后
+message_received     modifying    网关收到消息时
+message_sending      modifying    回复发送前
+message_sent         void         回复发送后
+session_start        void         新会话创建时
+
+策略说明:
+  void      -- 即发即忘, 忽略返回值
+  modifying -- 串行管道, 每个钩子变换数据
+  sync      -- 阻塞直到完成
+```
+
+## 守护进程支持
+
+bashclaw 自动检测你的 init 系统:
+
+```
+平台            Init 系统       命令
+--------        -----------     -------
+Linux           systemd         bashclaw daemon install --enable
+macOS           launchd         bashclaw daemon install --enable
+Android/其他    cron            bashclaw daemon install --enable
+```
+
+```sh
+bashclaw daemon install --enable   # 安装 + 启动
+bashclaw daemon status             # 检查运行状态
+bashclaw daemon logs               # 查看服务日志
+bashclaw daemon uninstall          # 停止 + 移除
 ```
 
 ## 配置
@@ -211,453 +454,120 @@ bashclaw version                           # 版本信息
   "agents": {
     "defaults": {
       "model": "claude-sonnet-4-20250514",
-      "maxTokens": 8192,
       "maxTurns": 50,
       "contextTokens": 200000,
-      "systemPrompt": "You are a helpful personal AI assistant.",
-      "temperature": 0.7,
-      "tools": ["web_fetch", "web_search", "memory", "shell", "message", "cron"]
-    },
-    "list": []
+      "tools": ["web_fetch", "web_search", "memory", "shell"]
+    }
   },
   "channels": {
-    "telegram": {
-      "enabled": true,
-      "botToken": "$TELEGRAM_BOT_TOKEN"
-    }
+    "telegram": { "enabled": true, "botToken": "$TELEGRAM_BOT_TOKEN" }
   },
-  "gateway": {
-    "port": 18789,
-    "auth": { "token": "$BASHCLAW_GATEWAY_TOKEN" }
-  },
-  "session": {
-    "scope": "per-sender",
-    "maxHistory": 200,
-    "idleResetMinutes": 30
-  },
-  "heartbeat": {
-    "enabled": false
-  },
-  "cron": {
-    "enabled": false,
-    "maxConcurrentRuns": 1
-  },
-  "plugins": {
-    "allow": [],
-    "deny": [],
-    "load": { "paths": [] }
-  },
-  "security": {
-    "elevatedUsers": [],
-    "commands": {},
-    "userRoles": {}
-  }
+  "gateway": { "port": 18789 },
+  "session": { "scope": "per-sender", "idleResetMinutes": 30 },
+  "heartbeat": { "enabled": false },
+  "cron": { "enabled": false }
 }
 ```
 
-### 环境变量
+环境变量覆盖配置:
 
 | 变量 | 用途 |
-|---|---|
+|------|------|
 | `ANTHROPIC_API_KEY` | Anthropic Claude API 密钥 |
-| `ANTHROPIC_BASE_URL` | 自定义 API 基础 URL (代理/兼容 API) |
-| `MODEL_ID` | 覆盖默认模型名称 |
 | `OPENAI_API_KEY` | OpenAI API 密钥 |
-| `BRAVE_SEARCH_API_KEY` | Brave 搜索 API |
-| `PERPLEXITY_API_KEY` | Perplexity API |
+| `GOOGLE_API_KEY` | Google Gemini API 密钥 |
+| `OPENROUTER_API_KEY` | OpenRouter API 密钥 |
+| `ANTHROPIC_BASE_URL` | 自定义 API 端点 (代理) |
+| `MODEL_ID` | 覆盖默认模型 |
 | `BASHCLAW_STATE_DIR` | 状态目录 (默认: ~/.bashclaw) |
-| `BASHCLAW_CONFIG` | 配置文件路径覆盖 |
-| `LOG_LEVEL` | 日志级别: debug, info, warn, error, fatal, silent |
-| `BASHCLAW_BOOTSTRAP_MAX_CHARS` | 系统提示中每个引导文件的最大字符数 (默认: 20000) |
-| `TOOL_WEB_FETCH_MAX_CHARS` | web_fetch 最大响应体大小 (默认: 102400) |
-| `TOOL_SHELL_TIMEOUT` | Shell 命令超时秒数 (默认: 30) |
-| `TOOL_READ_FILE_MAX_LINES` | read_file 工具最大行数 (默认: 2000) |
-| `TOOL_LIST_FILES_MAX` | list_files 工具最大条目数 (默认: 500) |
-
-### 自定义 API 端点
-
-bashclaw 支持任何 Anthropic 兼容 API：
-
-```sh
-# 使用 BigModel/GLM
-export ANTHROPIC_BASE_URL=https://open.bigmodel.cn/api/anthropic
-export MODEL_ID=glm-5
-
-# 使用任意兼容代理
-export ANTHROPIC_BASE_URL=https://your-proxy.example.com
-```
-
-## 频道设置
-
-### Telegram
-
-```sh
-./bashclaw config set '.channels.telegram.botToken' '"YOUR_BOT_TOKEN"'
-./bashclaw config set '.channels.telegram.enabled' 'true'
-./bashclaw gateway  # 启动 Telegram 长轮询监听
-```
-
-### Discord
-
-```sh
-./bashclaw config set '.channels.discord.botToken' '"YOUR_BOT_TOKEN"'
-./bashclaw config set '.channels.discord.enabled' 'true'
-./bashclaw gateway
-```
-
-### Slack
-
-```sh
-./bashclaw config set '.channels.slack.botToken' '"xoxb-YOUR-TOKEN"'
-./bashclaw config set '.channels.slack.enabled' 'true'
-./bashclaw gateway
-```
-
-## 内置工具
-
-| 工具 | 描述 |
-|---|---|
-| `web_fetch` | HTTP 请求 (带 SSRF 保护) |
-| `web_search` | 网页搜索 (Brave/Perplexity) |
-| `shell` | 执行命令 (带安全过滤) |
-| `memory` | 持久化键值存储 (带标签和搜索) |
-| `message` | 发送消息到频道 |
-| `cron` | 调度定期任务 |
-| `agents_list` | 列出可用 Agent |
-| `session_status` | 当前会话信息 |
-| `sessions_list` | 列出所有会话 |
-| `agent_message` | 向其他 Agent 发送消息 |
-| `read_file` | 读取文件内容 (行数限制) |
-| `write_file` | 写入文件内容 |
-| `list_files` | 列出目录内容 |
-| `file_search` | 按模式搜索文件 |
-
-## 心跳系统
-
-心跳系统支持周期性自主 Agent 签到。Agent 可以执行定期的自主操作（如检查提醒、监控系统），无需用户主动发起对话。
-
-```sh
-# 全局启用
-./bashclaw config set '.heartbeat.enabled' 'true'
-
-# 每个 Agent 的心跳配置
-./bashclaw config set '.agents.list[0].heartbeat.enabled' 'true'
-./bashclaw config set '.agents.list[0].heartbeat.interval' '"30m"'
-./bashclaw config set '.agents.list[0].heartbeat.activeHours.start' '"08:00"'
-./bashclaw config set '.agents.list[0].heartbeat.activeHours.end' '"22:00"'
-./bashclaw config set '.agents.list[0].heartbeat.timezone' '"local"'
-```
-
-守卫链（心跳运行前的 6 项检查）：
-
-1. 全局心跳已启用
-2. Agent 级别心跳未禁用
-3. 间隔有效（> 0）
-4. 当前时间在活跃时段内（支持跨午夜窗口）
-5. 无正在进行的处理（无通道锁被持有）
-6. HEARTBEAT.md 文件存在且有内容
-
-心跳提示指示 Agent 读取 HEARTBEAT.md 并遵循其中的指令。如果无需关注，Agent 回复 `HEARTBEAT_OK`，该响应会被静默丢弃。有意义的响应会被去重（24小时窗口）并作为系统事件入队到主会话。
-
-## 插件系统
-
-插件可以为 bashclaw 扩展自定义工具、钩子、命令和 LLM 提供者。插件从 4 个来源目录中发现：
-
-1. **内置**: `${BASHCLAW_ROOT}/extensions/`
-2. **全局**: `~/.bashclaw/extensions/`
-3. **工作空间**: `.bashclaw/extensions/`（相对于当前目录）
-4. **配置**: `plugins.load.paths`（自定义路径数组）
-
-每个插件目录包含一个 `bashclaw.plugin.json` 清单文件和一个入口脚本（`init.sh` 或 `<id>.sh`）。入口脚本使用以下函数注册组件：
-
-```sh
-# 注册自定义工具
-plugin_register_tool "my_tool" "描述" '{"param1":{"type":"string"}}' "/path/to/handler.sh"
-
-# 注册钩子
-plugin_register_hook "pre_message" "/path/to/hook.sh" 50
-
-# 注册 CLI 命令
-plugin_register_command "my_cmd" "描述" "/path/to/cmd.sh"
-
-# 注册 LLM 提供者
-plugin_register_provider "my_llm" "My LLM" '["model-a","model-b"]' '{"envKey":"MY_API_KEY"}'
-```
-
-插件允许/拒绝列表控制哪些插件被加载：
-
-```json
-{
-  "plugins": {
-    "allow": ["plugin-a"],
-    "deny": ["plugin-b"],
-    "entries": {
-      "plugin-c": { "enabled": false }
-    }
-  }
-}
-```
-
-## 技能系统
-
-技能是存储在 Agent 工作空间目录下的提示级能力。每个技能目录包含一个 `SKILL.md`（必需）和一个可选的 `skill.json` 元数据文件。
-
-```sh
-~/.bashclaw/agents/main/skills/
-  code-review/
-    SKILL.md          # Agent 的详细指令
-    skill.json        # { "description": "代码审查", "tags": ["dev"] }
-  summarize/
-    SKILL.md
-    skill.json
-```
-
-可用技能会自动列在 Agent 的系统提示中。Agent 可以按需加载特定技能的 SKILL.md 获取详细指令。
-
-## 高级定时任务
-
-定时任务系统支持三种调度类型：
-
-| 类型 | 格式 | 示例 |
-|---|---|---|
-| `at` | 一次性 ISO 时间戳 | `{"kind":"at","at":"2025-12-01T09:00:00Z"}` |
-| `every` | 间隔毫秒数 | `{"kind":"every","everyMs":3600000}` |
-| `cron` | 带时区的 5 字段 cron 表达式 | `{"kind":"cron","expr":"0 9 * * 1","tz":"America/New_York"}` |
-
-功能特性：
-
-- **指数退避**: 失败的任务按 30秒、60秒、5分钟、15分钟、60分钟（上限）退避
-- **卡死任务检测**: 超过卡死阈值（默认 2 小时）的运行会被自动释放
-- **隔离会话**: 任务可在专用会话中运行，避免污染主对话
-- **并发运行限制**: 可配置最大并发 cron 运行数（默认: 1）
-- **会话回收**: 超过保留期的旧隔离 cron 会话会被自动清理
-- **运行历史**: 所有任务执行记录在 `cron/history/runs.jsonl`
-
-```sh
-# 列出定时任务
-./bashclaw cron list
-
-# 添加任务
-./bashclaw cron add --id daily-summary --schedule '{"kind":"cron","expr":"0 9 * * *"}' --prompt "总结今日"
-
-# 查看运行历史
-./bashclaw cron history
-
-# 手动触发任务
-./bashclaw cron run daily-summary
-```
-
-## 事件队列
-
-后台进程（心跳、定时任务、异步命令）将系统事件入队。这些事件在下一次用户发起的轮次中被排空并注入到 Agent 的消息上下文中。
-
-- 每个会话 FIFO 队列（最多 20 个事件）
-- 连续相同事件会被去重
-- 基于文件的锁文件并发控制
-- 事件以 `[SYSTEM EVENT]` 前缀消息的形式出现在 Agent 上下文中
-
-## 去重缓存
-
-去重模块为消息处理提供基于 TTL 的幂等性检查：
-
-- 基于文件的缓存存储在 `${BASHCLAW_STATE_DIR}/dedup/`
-- 每次检查可配置 TTL（默认 300 秒）
-- 从频道 + 发送者 + 内容哈希生成组合键
-- 自动清理过期条目
-- 防止频道轮询导致的重复消息处理
-
-## 安全模型（8 层）
-
-bashclaw 实现纵深防御安全策略：
-
-| 层级 | 模块 | 描述 |
-|---|---|---|
-| 1. SSRF 防护 | `tools.sh` | 在 web_fetch 中阻止私有/内部 IP |
-| 2. 命令过滤 | `security.sh` | 阻止危险的 shell 模式 (rm -rf /, fork 炸弹等) |
-| 3. 配对码 | `security.sh` | 6 位限时验证码用于频道认证 |
-| 4. 频率限制 | `security.sh` | 基于令牌桶的每用户限流（可配置每分钟上限） |
-| 5. 工具策略 | `security.sh` | 每 Agent 的允许/拒绝列表，会话类型限制（子 Agent/cron） |
-| 6. 提权策略 | `security.sh` | 危险工具的提权授权（shell、write_file） |
-| 7. 命令授权 / RBAC | `security.sh` | 基于角色的命名命令访问控制 |
-| 8. 审计日志 | `security.sh` | 所有安全相关事件的 JSONL 审计记录 |
-
-```sh
-# 生成配对码
-./bashclaw security pair-generate telegram user123
-
-# 验证配对码
-./bashclaw security pair-verify telegram user123 482910
-
-# 检查工具是否允许
-./bashclaw security tool-check main shell main
-
-# 检查提权授权
-./bashclaw security elevated-check shell user123 telegram
-
-# 查看审计日志（最近 20 条）
-./bashclaw security audit
-```
-
-## 钩子系统
-
-钩子系统提供 14 事件中间件管道，支持三种执行策略：
-
-**事件列表：**
-
-| 事件 | 策略 | 描述 |
-|---|---|---|
-| `pre_message` | modifying | 消息处理前（可修改输入） |
-| `post_message` | void | 消息处理后 |
-| `pre_tool` | modifying | 工具执行前（可修改参数） |
-| `post_tool` | modifying | 工具执行后（可修改结果） |
-| `on_error` | void | 发生错误时 |
-| `on_session_reset` | void | 会话重置时 |
-| `before_agent_start` | sync | Agent 开始处理前 |
-| `agent_end` | void | Agent 处理完成后 |
-| `before_compaction` | sync | 上下文压缩前 |
-| `after_compaction` | void | 上下文压缩后 |
-| `message_received` | modifying | 网关收到消息时 |
-| `message_sending` | modifying | 回复发送前 |
-| `message_sent` | void | 回复发送后 |
-| `session_start` | void | 新会话创建时 |
-
-**执行策略：**
-- `void`: 并行即发即忘，忽略返回值
-- `modifying`: 串行管道，每个钩子可修改输入 JSON
-- `sync`: 同步热路径，阻塞直到完成
-
-```sh
-# 列出钩子
-./bashclaw hooks list
-
-# 添加钩子
-./bashclaw hooks add --name log-messages --event pre_message --handler /path/to/script.sh
-
-# 测试钩子
-./bashclaw hooks test log-messages '{"text":"hello"}'
-
-# 启用/禁用
-./bashclaw hooks enable log-messages
-./bashclaw hooks disable log-messages
-```
-
-## 处理队列
-
-处理队列实现双层并发控制：
-
-- **第 1 层**: 每 Agent 的原始 FIFO 队列（向后兼容）
-- **第 2 层**: 带可配置并发限制的类型化通道
-  - `main` 通道: 最大 4 个并发（可配置）
-  - `cron` 通道: 最大 1 个并发
-  - `subagent` 通道: 最大 8 个并发
-- 基于文件的锁文件实现跨进程安全
-- 队列模式支持: 按 Agent 和全局
-- 中止机制用于取消排队命令
-
-## 守护进程支持
-
-bashclaw 可以作为系统服务运行，支持自动重启：
-
-```sh
-# 安装并启用 (自动检测 systemd/launchd/cron)
-./bashclaw daemon install --enable
-
-# 查看状态
-./bashclaw daemon status
-
-# 查看日志
-./bashclaw daemon logs
-
-# 停止并卸载
-./bashclaw daemon uninstall
-```
-
-支持的初始化系统：
-- **systemd** (Linux)
-- **launchd** (macOS)
-- **cron** (通用回退，包括 Android/Termux)
+| `LOG_LEVEL` | debug \| info \| warn \| error \| silent |
 
 ## 测试
 
 ```sh
-# 运行所有测试 (222 个用例, 320 个断言)
+# 运行所有测试 (334 个用例, 473 个断言)
 bash tests/run_all.sh
 
-# 仅运行单元测试
-bash tests/run_all.sh --unit
+# 按类别
+bash tests/run_all.sh --unit          # 仅单元测试
+bash tests/run_all.sh --compat        # Bash 3.2 兼容性
+bash tests/run_all.sh --integration   # 实时 API 测试 (需要密钥)
 
-# 仅运行兼容性测试
-bash tests/run_all.sh --compat
-
-# 运行集成测试 (需要 API 密钥)
-bash tests/run_all.sh --integration
-
-# 运行单个测试套件
+# 单个套件
 bash tests/test_memory.sh
-bash tests/test_hooks.sh
 bash tests/test_security.sh
-
-# 详细输出模式
-bash tests/run_all.sh --verbose
+bash tests/test_hooks.sh
 ```
 
-### 测试覆盖
+| 套件 | 测试数 | 覆盖内容 |
+|------|--------|----------|
+| test_utils | 25 | UUID, 哈希, 重试, 时间戳 |
+| test_config | 25 | 加载, 获取, 设置, 验证 |
+| test_session | 26 | JSONL, 修剪, 空闲重置, 导出 |
+| test_tools | 28 | 14 个工具, SSRF, 分发 |
+| test_routing | 17 | 7 级解析, 白名单 |
+| test_agent | 15 | 模型, 消息, 引导文件 |
+| test_channels | 11 | 源解析, 截断 |
+| test_cli | 13 | 参数解析, 路由 |
+| test_memory | 10 | 存储, 搜索, 导入/导出 |
+| test_hooks | 7 | 注册, 链式, 变换 |
+| test_security | 8 | 配对码, 频率限制, RBAC |
+| test_process | 13 | 队列, 通道, 并发 |
+| test_boot | 2 | BOOT.md 解析 |
+| test_autoreply | 6 | 模式匹配, 过滤 |
+| test_daemon | 3 | 安装, 状态 |
+| test_install | 2 | 安装器验证 |
+| test_heartbeat | 18 | 守卫链, 活跃时段, 事件 |
+| test_events | 12 | FIFO 队列, 排空, 去重 |
+| test_cron_advanced | 17 | 调度类型, 退避, 卡死任务 |
+| test_plugin | 14 | 发现, 加载, 注册, 启用 |
+| test_skills | 11 | 技能发现, 加载 |
+| test_dedup | 13 | TTL 缓存, 过期, 清理 |
+| test_integration | 11 | 实时 API, 多轮对话 |
+| test_compat | 10 | Bash 3.2 验证 |
 
-| 套件 | 用例数 | 覆盖内容 |
-|---|---|---|
-| test_utils | 25 | UUID、哈希、url_encode、重试、trim、时间戳 |
-| test_config | 25 | 加载、获取、设置、验证、agent/频道配置 |
-| test_session | 26 | JSONL 持久化、修剪、空闲重置、导出 |
-| test_tools | 28 | 工具分发、web_fetch、shell、memory、cron、文件 |
-| test_routing | 17 | 7 级 Agent 解析、白名单、提及门控、回复格式 |
-| test_agent | 15 | 模型解析、消息构建、工具规范、引导文件 |
-| test_channels | 11 | 频道加载、最大长度、消息截断 |
-| test_cli | 13 | CLI 参数解析、子命令路由 |
-| test_memory | 10 | 存储、获取、搜索、列表、删除、导入/导出 |
-| test_hooks | 7 | 注册、运行、链式调用、启用/禁用、转换、14 事件 |
-| test_security | 8 | 配对码、频率限制、审计日志、执行审批、工具策略 |
-| test_process | 3 | 队列 FIFO、出队、状态、类型化通道 |
-| test_boot | 2 | BOOT.md 解析、状态跟踪 |
-| test_autoreply | 6 | 规则增删、模式匹配、频道过滤 |
-| test_daemon | 3 | 安装、卸载、状态 |
-| test_install | 2 | 安装器帮助、prefix 选项 |
-| test_integration | 11 | 真实 API 调用、多轮对话、工具使用、并发 |
-| test_compat | 10 | Bash 3.2 兼容性、无 declare -A/-g、关键函数 |
+## Bash 3.2 兼容性
+
+所有代码运行在每台自 2006 年以来的 Mac 自带的 Bash 上:
+
+- 不用 `declare -A` (关联数组) -- 使用基于文件的存储
+- 不用 `declare -g` (全局声明) -- 使用模块级变量
+- 不用 `mapfile` / `readarray` -- 使用 while-read 循环
+- 不用 `&>>` 重定向 -- 使用 `>> file 2>&1`
+- 不用 `|&` 管道简写 -- 使用 `2>&1 |`
+
+这意味着 bashclaw 可以运行在:
+- 每个曾出货的 macOS 版本 (不需要 Homebrew)
+- 任何安装了 bash 的 Linux
+- Android Termux (不需要 root)
+- Windows WSL
+- 最小容器 (Alpine + bash)
+- 树莓派, 嵌入式系统
 
 ## 设计决策
 
-### 消除 OpenClaw 中的冗余
+### 从 OpenClaw 中移除的部分
 
-1. **配置验证**: 单次 jq 解析取代 6 次 Zod 验证和 234 个 `.strict()` 调用
-2. **会话管理**: 直接 JSONL 文件操作取代复杂的合并/缓存层
-3. **头像解析**: 完全消除（不再每次请求进行 base64 图片编码）
-4. **日志**: 简单的级别检查 + printf 取代 10,000+ 行的 tslog 子系统
-5. **工具加载**: 直接函数分发取代延迟加载模块注册表
-6. **频道路由**: 简单的 case/函数模式取代 8 种适配器类型多态接口
-7. **启动**: 即时（source 脚本）取代 40+ 个顺序异步初始化步骤
+1. **配置验证**: 6 次 Zod 验证 + 234 个 `.strict()` 调用 -> 单次 `jq empty`
+2. **会话管理**: 复杂的合并/缓存层 -> 直接 JSONL 文件操作
+3. **头像解析**: 每次请求 Base64 图片编码 -> 完全消除
+4. **日志**: 10,000+ 行 tslog + 每日志颜色哈希 -> `printf` + 级别检查
+5. **工具加载**: 延迟加载模块注册表 -> 直接函数分发
+6. **频道路由**: 8 种适配器多态接口 -> 简单的 case/函数
+7. **启动**: 40+ 个异步初始化步骤 -> 即时 `source` (< 100ms)
 
-### Bash 3.2 兼容性
+### 从 OpenClaw 中保留的精华
 
-所有代码均可在 macOS 默认 bash (3.2)、Linux 和 Android Termux（无需 root）上运行：
-
-- 不使用关联数组 (`declare -A`)
-- 不使用 `declare -g` (全局声明)
-- 不使用 `mapfile` / `readarray`
-- 不使用 `&>>` 重定向操作符
-- 基于文件的状态跟踪取代内存映射
-- 系统命令的跨平台回退链
-
-### 安全
-
-- `web_fetch` 的 SSRF 保护（阻止私有 IP）
-- 命令执行安全过滤（阻止 `rm -rf /`、fork 炸弹等）
-- 频道认证配对码
-- 基于令牌桶的每用户频率限制
-- 每 Agent 的工具允许/拒绝策略列表
-- 危险工具的提权授权检查
-- 基于角色的命令授权 (RBAC)
-- 所有安全事件的审计日志（JSONL）
-- 配置文件权限控制 (chmod 600)
+- 7 级消息路由和绑定
+- 多频道网关架构
+- JSONL 会话持久化和压缩
+- 工作空间文件 (SOUL.md, MEMORY.md, BOOT.md)
+- 心跳系统和活跃时段
+- 插件系统 (4 个发现来源)
+- 技能系统 (每 Agent 的 SKILL.md)
+- 高级定时任务 (at/every/cron + 退避)
+- 8 层安全模型
+- 类型化通道处理队列
 
 ## 许可证
 

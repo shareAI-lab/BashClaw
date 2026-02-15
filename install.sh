@@ -239,6 +239,18 @@ _add_to_path() {
 
   local path_line="export PATH=\"${install_dir}:\$PATH\""
   local shell_configs=()
+  local os
+  os="$(_detect_os)"
+
+  # On macOS (darwin), zsh is the default shell since Catalina.
+  # Always ensure .zshrc exists and has the PATH entry.
+  if [[ "$os" == "darwin" ]]; then
+    if [[ ! -f "$HOME/.zshrc" ]]; then
+      touch "$HOME/.zshrc"
+      _info "Created $HOME/.zshrc (macOS default shell is zsh)"
+    fi
+    shell_configs+=("$HOME/.zshrc")
+  fi
 
   if [[ -f "$HOME/.bashrc" ]]; then
     shell_configs+=("$HOME/.bashrc")
@@ -248,7 +260,8 @@ _add_to_path() {
   elif [[ -f "$HOME/.profile" ]]; then
     shell_configs+=("$HOME/.profile")
   fi
-  if [[ -f "$HOME/.zshrc" ]]; then
+  # Also pick up .zshrc on non-macOS if it exists
+  if [[ "$os" != "darwin" && -f "$HOME/.zshrc" ]]; then
     shell_configs+=("$HOME/.zshrc")
   fi
 
@@ -265,7 +278,6 @@ _add_to_path() {
   done
 
   if [[ "$added" == "false" && ${#shell_configs[@]} -eq 0 ]]; then
-    # No shell configs found, create .bashrc
     printf '# bashclaw\n%s\n' "$path_line" >> "$HOME/.bashrc"
     _info "Added to PATH in $HOME/.bashrc"
   fi
@@ -343,34 +355,55 @@ _uninstall() {
   _print "To remove all data: rm -rf ~/.bashclaw"
 }
 
+_verify_install() {
+  local install_dir="$1"
+
+  if [[ -x "${install_dir}/bashclaw" ]]; then
+    local version
+    version="$("${install_dir}/bashclaw" version 2>/dev/null)" || version="unknown"
+    _info "Verified: ${version}"
+    return 0
+  else
+    _warn "bashclaw binary not found or not executable at ${install_dir}/bashclaw"
+    return 1
+  fi
+}
+
 _print_instructions() {
-  _print ""
-  _print "============================================"
-  _print "  Installation complete!"
-  _print "============================================"
-  _print ""
-  _print "Getting started:"
-  _print ""
-  _print "  1. Set your API key:"
-  _print "     export ANTHROPIC_API_KEY='your-key-here'"
-  _print ""
-  _print "  2. Run the setup wizard:"
-  _print "     bashclaw onboard"
-  _print ""
-  _print "  3. Or start chatting directly:"
-  _print "     bashclaw agent -i"
-  _print ""
-  _print "  4. Start the gateway server:"
-  _print "     bashclaw gateway"
-  _print ""
-  _print "  5. Install as a system service:"
-  _print "     bashclaw daemon install --enable"
-  _print ""
-  _print "For help: bashclaw help"
-  _print ""
-  _print "If bashclaw is not found, restart your shell or run:"
-  _print "  source ~/.bashrc  # or ~/.zshrc"
-  _print ""
+  local os
+  os="$(_detect_os)"
+  local shell_rc="\$HOME/.bashrc"
+  if [[ "$os" == "darwin" ]]; then
+    shell_rc="\$HOME/.zshrc"
+  fi
+
+  cat <<EOF
+
+  =============================================
+    bashclaw installed successfully!
+  =============================================
+
+  Quick start:
+
+    1. Reload your shell (or open a new terminal):
+       source ${shell_rc}
+
+    2. Set your API key:
+       export ANTHROPIC_API_KEY='sk-ant-...'
+
+    3. Start chatting:
+       bashclaw agent -i
+
+  Other commands:
+
+    bashclaw onboard          # Interactive setup wizard
+    bashclaw doctor           # Diagnose issues
+    bashclaw gateway          # Start multi-channel gateway
+    bashclaw daemon install   # Run as background service
+
+  Documentation: https://github.com/shareAI-lab/bashclaw
+
+EOF
 }
 
 # ---- Main ----
@@ -434,6 +467,7 @@ main() {
   _download_bashclaw "$_INSTALL_DIR"
   _add_to_path "$_INSTALL_DIR"
   _create_default_config
+  _verify_install "$_INSTALL_DIR"
 
   _print_instructions
 }

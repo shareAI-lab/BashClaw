@@ -309,11 +309,15 @@ cron_matches_now() {
   local schedule="$1"
 
   # Parse cron expression: minute hour day month weekday
-  local fields
-  IFS=' ' read -ra fields <<< "$schedule"
-  if (( ${#fields[@]} < 5 )); then
+  # Use set -- for Bash 3.2 compatibility (no read -ra)
+  local old_ifs="$IFS"
+  IFS=' '
+  set -- $schedule
+  IFS="$old_ifs"
+  if [ "$#" -lt 5 ]; then
     return 1
   fi
+  local f_min="$1" f_hour="$2" f_day="$3" f_month="$4" f_dow="$5"
 
   local now_min now_hour now_day now_month now_dow
   now_min=$(( 10#$(date +%M) ))
@@ -322,11 +326,11 @@ cron_matches_now() {
   now_month=$(( 10#$(date +%m) ))
   now_dow="$(date +%u)"  # 1=Monday, 7=Sunday
 
-  cron_field_matches "${fields[0]}" "$now_min" 0 59 || return 1
-  cron_field_matches "${fields[1]}" "$now_hour" 0 23 || return 1
-  cron_field_matches "${fields[2]}" "$now_day" 1 31 || return 1
-  cron_field_matches "${fields[3]}" "$now_month" 1 12 || return 1
-  cron_field_matches "${fields[4]}" "$now_dow" 0 7 || return 1
+  cron_field_matches "$f_min" "$now_min" 0 59 || return 1
+  cron_field_matches "$f_hour" "$now_hour" 0 23 || return 1
+  cron_field_matches "$f_day" "$now_day" 1 31 || return 1
+  cron_field_matches "$f_month" "$now_month" 1 12 || return 1
+  cron_field_matches "$f_dow" "$now_dow" 0 7 || return 1
 
   return 0
 }
