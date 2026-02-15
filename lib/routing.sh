@@ -13,6 +13,7 @@ _channel_max_length() {
     imessage)  echo 20000 ;;
     line)      echo 5000 ;;
     signal)    echo 4096 ;;
+    feishu)    echo 30000 ;;
     web)       echo 100000 ;;
     *)         echo 4096 ;;
   esac

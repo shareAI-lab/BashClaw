@@ -21,13 +21,6 @@
       "supports_images": true,
       "supports_thinking": false
     },
-    "glm-5": {
-      "provider": "anthropic",
-      "max_tokens": 4096,
-      "context_window": 128000,
-      "supports_images": false,
-      "supports_thinking": false
-    },
     "gpt-4o": {
       "provider": "openai",
       "max_tokens": 4096,
@@ -97,6 +90,92 @@
       "context_window": 1048576,
       "supports_images": true,
       "supports_thinking": false
+    },
+    "deepseek-chat": {
+      "provider": "deepseek",
+      "max_tokens": 8192,
+      "context_window": 128000,
+      "supports_images": false,
+      "supports_thinking": false
+    },
+    "deepseek-reasoner": {
+      "provider": "deepseek",
+      "max_tokens": 8192,
+      "context_window": 128000,
+      "supports_images": false,
+      "supports_thinking": true
+    },
+    "qwen-max": {
+      "provider": "qwen",
+      "max_tokens": 8192,
+      "context_window": 128000,
+      "supports_images": false,
+      "supports_thinking": false
+    },
+    "qwen-plus": {
+      "provider": "qwen",
+      "max_tokens": 8192,
+      "context_window": 128000,
+      "supports_images": false,
+      "supports_thinking": false
+    },
+    "qwen-turbo": {
+      "provider": "qwen",
+      "max_tokens": 8192,
+      "context_window": 128000,
+      "supports_images": false,
+      "supports_thinking": false
+    },
+    "qwq-plus": {
+      "provider": "qwen",
+      "max_tokens": 8192,
+      "context_window": 128000,
+      "supports_images": false,
+      "supports_thinking": true
+    },
+    "glm-4.7-flash": {
+      "provider": "zhipu",
+      "max_tokens": 4096,
+      "context_window": 128000,
+      "supports_images": false,
+      "supports_thinking": false,
+      "free": true
+    },
+    "glm-4.5-flash": {
+      "provider": "zhipu",
+      "max_tokens": 4096,
+      "context_window": 128000,
+      "supports_images": false,
+      "supports_thinking": false,
+      "free": true
+    },
+    "glm-4.7": {
+      "provider": "zhipu",
+      "max_tokens": 4096,
+      "context_window": 128000,
+      "supports_images": false,
+      "supports_thinking": true
+    },
+    "moonshot-v1-128k": {
+      "provider": "moonshot",
+      "max_tokens": 4096,
+      "context_window": 128000,
+      "supports_images": false,
+      "supports_thinking": false
+    },
+    "kimi-k2.5": {
+      "provider": "moonshot",
+      "max_tokens": 8192,
+      "context_window": 256000,
+      "supports_images": false,
+      "supports_thinking": true
+    },
+    "MiniMax-M2.5": {
+      "provider": "minimax",
+      "max_tokens": 8192,
+      "context_window": 128000,
+      "supports_images": false,
+      "supports_thinking": true
     }
   },
   "aliases": {
@@ -104,35 +183,70 @@
     "smart": "claude-opus-4-20250918",
     "balanced": "claude-sonnet-4-20250514",
     "cheap": "gpt-4o-mini",
+    "free": "glm-4.7-flash",
     "claude": "claude-sonnet-4-20250514",
     "gpt": "gpt-4o",
     "gemini": "gemini-2.0-flash",
     "opus": "claude-opus-4-20250918",
     "sonnet": "claude-sonnet-4-20250514",
     "haiku": "claude-haiku-3-20250307",
-    "flash": "gemini-2.0-flash"
+    "flash": "gemini-2.0-flash",
+    "deepseek": "deepseek-chat",
+    "qwen": "qwen-max",
+    "glm": "glm-4.7-flash",
+    "kimi": "kimi-k2.5",
+    "minimax": "MiniMax-M2.5"
   },
   "providers": {
     "anthropic": {
+      "api_format": "anthropic",
       "api_url_env": "ANTHROPIC_BASE_URL",
       "api_url_default": "https://api.anthropic.com",
       "api_key_env": "ANTHROPIC_API_KEY",
       "api_version": "2023-06-01"
     },
     "openai": {
+      "api_format": "openai",
       "api_url_env": "OPENAI_BASE_URL",
       "api_url_default": "https://api.openai.com",
       "api_key_env": "OPENAI_API_KEY"
     },
     "google": {
+      "api_format": "google",
       "api_url_env": "GOOGLE_AI_BASE_URL",
       "api_url_default": "https://generativelanguage.googleapis.com",
       "api_key_env": "GOOGLE_API_KEY"
     },
     "openrouter": {
+      "api_format": "openai",
       "api_url_env": "OPENROUTER_BASE_URL",
       "api_url_default": "https://openrouter.ai/api",
       "api_key_env": "OPENROUTER_API_KEY"
+    },
+    "deepseek": {
+      "api_format": "openai",
+      "api_url_default": "https://api.deepseek.com",
+      "api_key_env": "DEEPSEEK_API_KEY"
+    },
+    "qwen": {
+      "api_format": "openai",
+      "api_url_default": "https://dashscope.aliyuncs.com/compatible-mode",
+      "api_key_env": "QWEN_API_KEY"
+    },
+    "zhipu": {
+      "api_format": "openai",
+      "api_url_default": "https://open.bigmodel.cn/api/paas/v4",
+      "api_key_env": "ZHIPU_API_KEY"
+    },
+    "moonshot": {
+      "api_format": "openai",
+      "api_url_default": "https://api.moonshot.cn",
+      "api_key_env": "MOONSHOT_API_KEY"
+    },
+    "minimax": {
+      "api_format": "openai",
+      "api_url_default": "https://api.minimax.io",
+      "api_key_env": "MINIMAX_API_KEY"
     }
   }
 }

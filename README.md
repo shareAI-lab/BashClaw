@@ -1,16 +1,14 @@
 <div align="center">
-<pre>
-     _               _          _
-    | |__   __ _ ___| |__   ___| | __ ___      __
-    | '_ \ / _` / __| '_ \ / __| |/ _` \ \ /\ / /
-    | |_) | (_| \__ \ | | | (__| | (_| |\ V  V /
-    |_.__/ \__,_|___/_| |_|\___|_|\__,_| \_/\_/
-</pre>
 
-<h3>The zero-dependency AI assistant that works everywhere Bash does.</h3>
+```
+ ____            _      ____ _
+| __ )  __ _ ___| |__  / ___| | __ ___      __
+|  _ \ / _` / __| '_ \| |   | |/ _` \ \ /\ / /
+| |_) | (_| \__ \ | | | |___| | (_| |\ V  V /
+|____/ \__,_|___/_| |_|\____|_|\__,_| \_/\_/
+```
 
-<p>Pure Bash + curl + jq. No Node.js. No Python. No binaries.<br>
-Same architecture as <a href="https://github.com/openclaw/openclaw">OpenClaw</a>, 99% less weight.</p>
+<h3>Bash is all you need.</h3>
 
 <p>
   <img src="https://img.shields.io/badge/bash-3.2%2B-4EAA25?logo=gnubash&logoColor=white" alt="Bash 3.2+" />
@@ -23,239 +21,98 @@ Same architecture as <a href="https://github.com/openclaw/openclaw">OpenClaw</a>
 </p>
 
 <p>
-  <a href="#one-line-install">Install</a> &middot;
+  <a href="#install">Install</a> &middot;
   <a href="#quick-start">Quick Start</a> &middot;
+  <a href="#llm-providers">Providers</a> &middot;
+  <a href="#channels">Channels</a> &middot;
   <a href="#architecture">Architecture</a> &middot;
-  <a href="#commands">Commands</a> &middot;
   <a href="README_CN.md">Chinese</a>
 </p>
 </div>
 
 ---
 
-## Why bashclaw?
+BashClaw is a pure-shell AI agent runtime. No Node.js, no Python, no compiled binaries -- just `bash`, `curl`, and `jq`. It implements the same multi-channel agent architecture as OpenClaw, but runs anywhere a shell exists.
+
+Because BashClaw is shell script, the agent can hot-modify its own source code at runtime -- no compilation, no restart, instant self-bootstrapping.
+
+## Why BashClaw
 
 ```sh
-# OpenClaw needs this:
-node >= 22, npm, 52 packages, playwright, sharp, 200-400MB RAM, 2-5s startup
+# OpenClaw needs:
+node >= 22, npm, 52 packages, 200-400MB RAM, 2-5s cold start
 
-# bashclaw needs this:
+# BashClaw needs:
 bash >= 3.2, curl, jq
-# That's it. Already on your machine.
+# Already on your machine.
 ```
 
-|                  | OpenClaw (TS)   | nanobot (Python)  | bashclaw          |
-|------------------|-----------------|-------------------|-------------------|
-| Runtime          | Node.js 22+     | Python 3.11+      | **Bash 3.2+**     |
-| Dependencies     | 52 npm packages | pip + packages    | **jq, curl**      |
-| Memory           | 200-400 MB      | 80-150 MB         | **< 10 MB**       |
-| Startup          | 2-5 seconds     | 1-2 seconds       | **< 100 ms**      |
-| Lines of code    | ~20,000+        | ~4,000            | **~17,300**       |
-| Install          | npm/Docker      | pip/Docker        | **curl \| bash**  |
-| macOS out-of-box | No (needs Node) | No (needs Python) | **Yes**           |
-| Android Termux   | Complex         | Complex           | **pkg install jq** |
-| Test coverage    | Unknown         | Unknown           | **334 tests**     |
+|                  | OpenClaw (TS)   | BashClaw (Bash)   |
+|------------------|-----------------|-------------------|
+| Runtime          | Node.js 22+     | **Bash 3.2+**     |
+| Dependencies     | 52 npm packages | **jq, curl**      |
+| Memory           | 200-400 MB      | **< 10 MB**       |
+| Cold start       | 2-5 seconds     | **< 100 ms**      |
+| Source lines     | ~20,000+        | **~14,000**       |
+| Install          | npm / Docker    | **curl \| bash**  |
+| macOS out-of-box | No (needs Node) | **Yes**           |
+| Android Termux   | Complex         | **pkg install jq** |
+| Hot self-modify  | No (needs build)| **Yes**           |
+| Tests            | Vitest          | **334 tests**     |
 
-### Bash 3.2: Why It Matters
+### Hot Self-Bootstrapping
 
-```
-2006-10  Bash 3.2 released (Chet Ramey, Case Western Reserve)
-2007-10  macOS Leopard ships Bash 3.2 -- every Mac since then has it
-2009-02  Bash 4.0 released (adds associative arrays, mapfile, |&)
-2019-06  macOS Catalina switches default shell to zsh
-2019-    Apple FREEZES /bin/bash at 3.2.57 forever (refuses GPLv3)
-2025     Every Mac, every Linux, Android Termux -- all have Bash 3.2+
-```
+BashClaw runs on the shell -- the environment that AI agents already understand best. The agent can read, modify, and reload its own source code at runtime without any compilation step. This makes BashClaw uniquely suited for self-evolving agent workflows.
 
-bashclaw targets 3.2 deliberately: no `declare -A`, no `mapfile`, no `|&`.
-This means it runs on **every Mac ever shipped since 2007** without Homebrew,
-every Linux distro, Android Termux (no root), Windows WSL, Alpine containers,
-and Raspberry Pi. Zero compilation. Zero binary downloads.
+### Runs Everywhere
 
-## One-line Install
+BashClaw targets Bash 3.2 (the version Apple froze on every Mac since 2007). No `declare -A`, no `mapfile`, no `|&`. This means it works on:
+
+- macOS (every version since 2007, no Homebrew needed)
+- Linux (any distro)
+- Android Termux (no root)
+- Windows (WSL2 / Git Bash)
+- Alpine containers, Raspberry Pi, embedded systems
+
+## Install
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/shareAI-lab/bashclaw/main/install.sh | bash
 ```
 
-Or clone and run directly (zero install):
+Or clone directly:
 
 ```sh
 git clone https://github.com/shareAI-lab/bashclaw.git
 cd bashclaw && ./bashclaw doctor
 ```
 
-### Platform Support
-
-| Platform              | Method               | Status              |
-|-----------------------|----------------------|---------------------|
-| macOS (Intel/Apple)   | curl install or git  | Works out of box    |
-| Ubuntu / Debian       | curl install or git  | Works out of box    |
-| Fedora / RHEL / Arch  | curl install or git  | Works out of box    |
-| Alpine Linux          | apk add bash jq curl | Works               |
-| Windows (WSL2)        | curl install or git  | Works               |
-| Android (Termux)      | pkg install jq curl  | Works, no root      |
-| Raspberry Pi          | curl install or git  | Works (< 10MB RAM)  |
-| Docker / CI           | git clone            | Works               |
-
 ## Quick Start
 
 ```sh
-# Step 1: Set your API key
-export ANTHROPIC_API_KEY="sk-ant-..."
+# Set API key (pick any provider)
+export ANTHROPIC_API_KEY="sk-ant-..."    # or OPENAI_API_KEY, GOOGLE_API_KEY, etc.
 
-# Step 2: Chat
+# Chat
 ./bashclaw agent -m "What is the mass of the sun?"
 
-# Step 3: Interactive mode
+# Interactive mode
 ./bashclaw agent -i
-```
 
-That's it. Three commands. No config files, no wizards, no signup.
-
-For a guided setup with channel configuration:
-
-```sh
+# Guided setup
 ./bashclaw onboard
-```
-
-## Architecture
-
-```
-                          +------------------+
-                          |    CLI / User    |
-                          +--------+---------+
-                                   |
-                    +--------------+--------------+
-                    |        bashclaw (main)       |
-                    |    472 lines, CLI router     |
-                    +--------------+--------------+
-                                   |
-          +------------------------+------------------------+
-          |                        |                        |
-  +-------+-------+      +--------+--------+      +--------+--------+
-  |    Channels    |      |    Core Engine   |      | Background Sys  |
-  +-------+-------+      +--------+--------+      +--------+--------+
-  | telegram.sh   |      | agent.sh         |      | heartbeat.sh    |
-  | discord.sh    |      | routing.sh       |      | cron.sh         |
-  | slack.sh      |      | session.sh       |      | events.sh       |
-  | (plugin: any) |      | tools.sh (14)    |      | process.sh      |
-  +---------------+      | memory.sh        |      | daemon.sh       |
-                          | config.sh        |      +-----------------+
-                          +------------------+
-                                   |
-          +------------------------+------------------------+
-          |                        |                        |
-  +-------+-------+      +--------+--------+      +--------+--------+
-  |   Extensions   |      |    Security      |      |     CLI Cmds    |
-  +-------+-------+      +--------+--------+      +--------+--------+
-  | plugin.sh      |      | 8-layer model    |      | cmd_agent.sh    |
-  | skills.sh      |      | SSRF protection  |      | cmd_config.sh   |
-  | hooks.sh (14)  |      | rate limiting    |      | cmd_session.sh  |
-  | autoreply.sh   |      | RBAC + audit     |      | cmd_cron.sh     |
-  | boot.sh        |      | pairing codes    |      | cmd_daemon.sh   |
-  | dedup.sh       |      | tool policies    |      | cmd_gateway.sh  |
-  +-----------------+      +-----------------+      | cmd_memory.sh   |
-                                                    | cmd_hooks.sh    |
-                                                    | cmd_onboard.sh  |
-                                                    | cmd_message.sh  |
-                                                    +-----------------+
-```
-
-### Message Flow
-
-```
-User Message
-  |
-  v
-Dedup Check ------> [seen before?] --> discard
-  |
-  v
-Auto-Reply Check -> [pattern match?] --> immediate reply
-  |
-  v
-Hook: pre_message (modifying pipeline)
-  |
-  v
-Routing (7-level priority resolution)
-  |  L1: exact peer binding
-  |  L2: parent peer (thread inheritance)
-  |  L3: guild binding
-  |  L4: channel binding
-  |  L5: team binding
-  |  L6: account binding
-  |  L7: default agent
-  v
-Security Gate
-  |  Rate limit --> [exceeded?] --> throttle
-  |  Pairing   --> [required?] --> challenge
-  |  Tool policy -> [denied?]  --> block
-  |  RBAC      --> [no role?]  --> deny
-  v
-Process Queue (dual-layer, typed lanes)
-  |  main:     max 4 concurrent
-  |  cron:     max 1 concurrent
-  |  subagent: max 8 concurrent
-  v
-Events Injection (drain queued system events)
-  |
-  v
-Agent Runtime
-  |  1. Resolve model + provider
-  |  2. Load workspace files (SOUL.md, MEMORY.md, ...)
-  |  3. Build system prompt (10 segments)
-  |  4. Build messages from JSONL session
-  |  5. API call (Anthropic/OpenAI/Google/OpenRouter)
-  |  6. Tool loop (max 10 iterations)
-  |  7. 5-level overflow degradation:
-  |     L1: reduce history
-  |     L2: auto-compaction (3 retries)
-  |     L3: model fallback chain
-  |     L4: session reset
-  v
-Session Persist (JSONL append + prune)
-  |
-  v
-Hook: post_message
-  |
-  v
-Delivery (format, split long messages, send)
-```
-
-### Background Systems
-
-```
-Heartbeat Loop (configurable interval)
-  |
-  +--> Active hours gate (08:00 - 22:00 default)
-  +--> No active processing check
-  +--> HEARTBEAT.md prompt injection
-  +--> Meaningful reply? --> enqueue as system event
-  +--> HEARTBEAT_OK?    --> discard silently
-
-Cron Service
-  |
-  +--> Schedule types: at (one-shot) | every (interval) | cron (5-field)
-  +--> Exponential backoff on failure (30s -> 60s -> 5m -> 15m -> 60m)
-  +--> Stuck job detection (2h threshold, auto-release)
-  +--> Isolated sessions (avoid polluting main conversation)
-
-Boot Automation
-  |
-  +--> BOOT.md in agent workspace
-  +--> Parse fenced code blocks
-  +--> Execute: shell commands or agent messages
-  +--> Status tracking per block
 ```
 
 ## LLM Providers
 
-bashclaw supports 4 providers with automatic detection and model aliasing:
+BashClaw supports 9 providers with data-driven routing. Adding a provider is a single JSON entry -- no code changes needed.
+
+### International Providers
 
 ```sh
 # Anthropic (default)
 export ANTHROPIC_API_KEY="sk-ant-..."
-bashclaw agent -m "hello"                           # uses claude-sonnet-4
+bashclaw agent -m "hello"
 
 # OpenAI
 export OPENAI_API_KEY="sk-..."
@@ -268,19 +125,179 @@ MODEL_ID=gemini-2.0-flash bashclaw agent -m "hello"
 # OpenRouter (any model)
 export OPENROUTER_API_KEY="sk-or-..."
 MODEL_ID=anthropic/claude-sonnet-4 bashclaw agent -m "hello"
-
-# Custom API-compatible endpoint
-export ANTHROPIC_BASE_URL=https://your-proxy.example.com
-bashclaw agent -m "hello"
 ```
 
-Model aliases for quick switching:
+### Chinese Providers
+
+All Chinese providers use OpenAI-compatible APIs. Set the env var and go.
 
 ```sh
-MODEL_ID=fast    # -> gemini-2.0-flash
-MODEL_ID=smart   # -> claude-opus-4
-MODEL_ID=balanced # -> claude-sonnet-4
-MODEL_ID=cheap   # -> gpt-4o-mini
+# DeepSeek
+export DEEPSEEK_API_KEY="sk-..."
+MODEL_ID=deepseek-chat bashclaw agent -m "hello"
+
+# Qwen (Alibaba DashScope)
+export QWEN_API_KEY="sk-..."
+MODEL_ID=qwen-max bashclaw agent -m "hello"
+
+# Zhipu GLM
+export ZHIPU_API_KEY="..."
+MODEL_ID=glm-4.7-flash bashclaw agent -m "hello"
+
+# Moonshot Kimi
+export MOONSHOT_API_KEY="sk-..."
+MODEL_ID=kimi-k2.5 bashclaw agent -m "hello"
+
+# MiniMax
+export MINIMAX_API_KEY="..."
+MODEL_ID=MiniMax-M2.5 bashclaw agent -m "hello"
+```
+
+### Free Tier Models
+
+| Model | Provider | Free Quota |
+|-------|----------|------------|
+| glm-4.7-flash | Zhipu | Free |
+| glm-4.5-flash | Zhipu | Free |
+| deepseek-chat | DeepSeek | 5M tokens (30-day for new accounts) |
+| qwen-turbo | Qwen | Free quota (90-day for new accounts) |
+
+### Model Aliases
+
+```sh
+MODEL_ID=fast      # -> gemini-2.0-flash
+MODEL_ID=smart     # -> claude-opus-4
+MODEL_ID=balanced  # -> claude-sonnet-4
+MODEL_ID=cheap     # -> gpt-4o-mini
+MODEL_ID=free      # -> glm-4.7-flash
+MODEL_ID=deepseek  # -> deepseek-chat
+MODEL_ID=qwen      # -> qwen-max
+MODEL_ID=kimi      # -> kimi-k2.5
+```
+
+## Channels
+
+BashClaw supports multiple messaging platforms. Each channel is a standalone shell script under `channels/`.
+
+| Channel | Status | Mode |
+|---------|--------|------|
+| Telegram | Stable | Long-poll listener |
+| Discord | Stable | WebSocket gateway |
+| Slack | Stable | Socket Mode / webhook |
+| Feishu / Lark | Stable | Webhook + App Bot polling |
+| QQ (via OneBot v11) | Planned | NapCat / LLOneBot bridge |
+
+### Telegram
+
+```sh
+bashclaw config set '.channels.telegram.botToken' '"BOT_TOKEN"'
+bashclaw config set '.channels.telegram.enabled' 'true'
+bashclaw gateway
+```
+
+### Discord
+
+```sh
+bashclaw config set '.channels.discord.botToken' '"BOT_TOKEN"'
+bashclaw config set '.channels.discord.enabled' 'true'
+bashclaw gateway
+```
+
+### Feishu / Lark
+
+Two modes: **Webhook** (outbound only, zero config) and **App Bot** (full bidirectional).
+
+```sh
+# Webhook mode (simple)
+bashclaw config set '.channels.feishu.webhookUrl' '"https://open.feishu.cn/open-apis/bot/v2/hook/xxx"'
+
+# App Bot mode (full features)
+bashclaw config set '.channels.feishu.appId' '"cli_xxx"'
+bashclaw config set '.channels.feishu.appSecret' '"secret"'
+bashclaw config set '.channels.feishu.monitorChats' '["oc_xxx"]'
+
+# International (Lark)
+bashclaw config set '.channels.feishu.region' '"intl"'
+
+bashclaw gateway
+```
+
+### Slack
+
+```sh
+bashclaw config set '.channels.slack.botToken' '"xoxb-YOUR-TOKEN"'
+bashclaw config set '.channels.slack.enabled' 'true'
+bashclaw gateway
+```
+
+## Architecture
+
+```
+                        +------------------+
+                        |    CLI / User    |
+                        +--------+---------+
+                                 |
+                  +--------------+--------------+
+                  |       BashClaw (main)        |
+                  |    472 lines, CLI router     |
+                  +--------------+--------------+
+                                 |
+        +------------------------+------------------------+
+        |                        |                        |
++-------+-------+      +--------+--------+      +--------+--------+
+|    Channels    |      |   Core Engine   |      | Background Sys  |
++-------+-------+      +--------+--------+      +--------+--------+
+| telegram.sh   |      | agent.sh         |      | heartbeat.sh    |
+| discord.sh    |      | routing.sh       |      | cron.sh         |
+| slack.sh      |      | session.sh       |      | events.sh       |
+| feishu.sh     |      | tools.sh (14)    |      | process.sh      |
+| (plugin: any) |      | memory.sh        |      | daemon.sh       |
++---------------+      | config.sh        |      +-----------------+
+                        +------------------+
+                                 |
+        +------------------------+------------------------+
+        |                        |                        |
++-------+-------+      +--------+--------+      +--------+--------+
+|   Extensions   |      |    Security      |      |    CLI Cmds     |
++-------+-------+      +--------+--------+      +--------+--------+
+| plugin.sh      |      | 8-layer model    |      | cmd_agent.sh    |
+| skills.sh      |      | SSRF protection  |      | cmd_config.sh   |
+| hooks.sh (14)  |      | rate limiting    |      | cmd_session.sh  |
+| autoreply.sh   |      | RBAC + audit     |      | cmd_cron.sh     |
+| boot.sh        |      | pairing codes    |      | cmd_daemon.sh   |
+| dedup.sh       |      | tool policies    |      | cmd_gateway.sh  |
++----------------+      +-----------------+      | cmd_memory.sh   |
+                                                  | cmd_hooks.sh    |
+                                                  | cmd_onboard.sh  |
+                                                  | cmd_message.sh  |
+                                                  +-----------------+
+```
+
+### Message Flow
+
+```
+User Message --> Dedup --> Auto-Reply --> Hook: pre_message
+  |
+  v
+Routing (7-level priority: peer > parent > guild > channel > team > account > default)
+  |
+  v
+Security Gate (rate limit, pairing, tool policy, RBAC)
+  |
+  v
+Process Queue (main: 4, cron: 1, subagent: 8 concurrent)
+  |
+  v
+Agent Runtime
+  1. Resolve model + provider (data-driven from models.json)
+  2. Load workspace (SOUL.md, MEMORY.md, BOOT.md)
+  3. Build system prompt (10 segments)
+  4. API call (Anthropic / OpenAI / Google / OpenRouter / DeepSeek / Qwen / Zhipu / Moonshot / MiniMax)
+  5. Tool loop (max 10 iterations)
+  6. Overflow degradation (reduce history -> compact -> model fallback -> reset)
+  |
+  v
+Session Persist (JSONL) --> Hook: post_message --> Delivery
 ```
 
 ## Commands
@@ -305,8 +322,6 @@ bashclaw completion [bash|zsh]               # Shell completions
 ```
 
 ## Built-in Tools (14)
-
-The agent has access to these tools during conversation:
 
 | Tool | Description | Elevation |
 |------|-------------|-----------|
@@ -338,46 +353,7 @@ Layer 7: RBAC                -- role-based command authorization
 Layer 8: Audit Logging       -- JSONL trail for all security events
 ```
 
-```sh
-# Generate a pairing code
-bashclaw security pair-generate telegram user123
-
-# Check tool access
-bashclaw security tool-check main shell main
-
-# View audit trail
-bashclaw security audit
-```
-
-## Channel Setup
-
-### Telegram
-
-```sh
-bashclaw config set '.channels.telegram.botToken' '"YOUR_BOT_TOKEN"'
-bashclaw config set '.channels.telegram.enabled' 'true'
-bashclaw gateway    # starts long-poll listener
-```
-
-### Discord
-
-```sh
-bashclaw config set '.channels.discord.botToken' '"YOUR_BOT_TOKEN"'
-bashclaw config set '.channels.discord.enabled' 'true'
-bashclaw gateway
-```
-
-### Slack
-
-```sh
-bashclaw config set '.channels.slack.botToken' '"xoxb-YOUR-TOKEN"'
-bashclaw config set '.channels.slack.enabled' 'true'
-bashclaw gateway
-```
-
 ## Plugin System
-
-Extend bashclaw with custom tools, hooks, commands, and LLM providers.
 
 ```
 Plugin Discovery (4 sources):
@@ -387,13 +363,9 @@ Plugin Discovery (4 sources):
   4. config: plugins.load.paths       # custom paths
 ```
 
-Each plugin has a `bashclaw.plugin.json` manifest and an entry script:
+Each plugin has a `bashclaw.plugin.json` manifest:
 
 ```sh
-# my-plugin/bashclaw.plugin.json
-{ "id": "my-plugin", "version": "1.0.0", "description": "My custom tool" }
-
-# my-plugin/init.sh
 plugin_register_tool "my_tool" "Does something" '{"input":{"type":"string"}}' "$PWD/handler.sh"
 plugin_register_hook "pre_message" "$PWD/filter.sh" 50
 plugin_register_command "my_cmd" "Custom command" "$PWD/cmd.sh"
@@ -404,7 +376,6 @@ plugin_register_provider "my_llm" "My LLM" '["model-a"]' '{"envKey":"MY_KEY"}'
 
 ```
 Event                Strategy     When
------                --------     ----
 pre_message          modifying    Before message processing (can modify input)
 post_message         void         After message processing
 pre_tool             modifying    Before tool execution (can modify args)
@@ -419,30 +390,6 @@ message_received     modifying    When message arrives at gateway
 message_sending      modifying    Before reply is dispatched
 message_sent         void         After reply is dispatched
 session_start        void         When a new session is created
-
-Strategies:
-  void      -- fire-and-forget, return value ignored
-  modifying -- serial pipeline, each hook transforms data
-  sync      -- blocks until complete
-```
-
-## Daemon Support
-
-bashclaw auto-detects your init system:
-
-```
-Platform        Init System     Command
---------        -----------     -------
-Linux           systemd         bashclaw daemon install --enable
-macOS           launchd         bashclaw daemon install --enable
-Android/other   cron            bashclaw daemon install --enable
-```
-
-```sh
-bashclaw daemon install --enable   # install + start
-bashclaw daemon status             # check if running
-bashclaw daemon logs               # view service logs
-bashclaw daemon uninstall          # stop + remove
 ```
 
 ## Configuration
@@ -460,24 +407,27 @@ Config file: `~/.bashclaw/bashclaw.json`
     }
   },
   "channels": {
-    "telegram": { "enabled": true, "botToken": "$TELEGRAM_BOT_TOKEN" }
+    "telegram": { "enabled": true, "botToken": "$TELEGRAM_BOT_TOKEN" },
+    "feishu": { "appId": "$FEISHU_APP_ID", "appSecret": "$FEISHU_APP_SECRET" }
   },
   "gateway": { "port": 18789 },
-  "session": { "scope": "per-sender", "idleResetMinutes": 30 },
-  "heartbeat": { "enabled": false },
-  "cron": { "enabled": false }
+  "session": { "scope": "per-sender", "idleResetMinutes": 30 }
 }
 ```
 
-Environment variables override config:
+### Environment Variables
 
 | Variable | Purpose |
 |----------|---------|
-| `ANTHROPIC_API_KEY` | Anthropic Claude API key |
-| `OPENAI_API_KEY` | OpenAI API key |
-| `GOOGLE_API_KEY` | Google Gemini API key |
-| `OPENROUTER_API_KEY` | OpenRouter API key |
-| `ANTHROPIC_BASE_URL` | Custom API endpoint (for proxies) |
+| `ANTHROPIC_API_KEY` | Anthropic Claude |
+| `OPENAI_API_KEY` | OpenAI |
+| `GOOGLE_API_KEY` | Google Gemini |
+| `OPENROUTER_API_KEY` | OpenRouter |
+| `DEEPSEEK_API_KEY` | DeepSeek |
+| `QWEN_API_KEY` | Qwen (Alibaba DashScope) |
+| `ZHIPU_API_KEY` | Zhipu GLM |
+| `MOONSHOT_API_KEY` | Moonshot Kimi |
+| `MINIMAX_API_KEY` | MiniMax |
 | `MODEL_ID` | Override default model |
 | `BASHCLAW_STATE_DIR` | State directory (default: ~/.bashclaw) |
 | `LOG_LEVEL` | debug \| info \| warn \| error \| silent |
@@ -485,18 +435,16 @@ Environment variables override config:
 ## Testing
 
 ```sh
-# Run all tests (334 cases, 473 assertions)
+# Run all (334 tests, 473 assertions)
 bash tests/run_all.sh
 
 # By category
-bash tests/run_all.sh --unit          # unit tests only
-bash tests/run_all.sh --compat        # bash 3.2 compatibility
-bash tests/run_all.sh --integration   # live API tests (needs key)
+bash tests/run_all.sh --unit
+bash tests/run_all.sh --compat
+bash tests/run_all.sh --integration
 
 # Single suite
-bash tests/test_memory.sh
-bash tests/test_security.sh
-bash tests/test_hooks.sh
+bash tests/test_agent.sh
 ```
 
 | Suite | Tests | Covers |
@@ -506,7 +454,7 @@ bash tests/test_hooks.sh
 | test_session | 26 | JSONL, prune, idle reset, export |
 | test_tools | 28 | 14 tools, SSRF, dispatch |
 | test_routing | 17 | 7-level resolution, allowlist |
-| test_agent | 15 | Model, messages, bootstrap |
+| test_agent | 15 | Model, provider routing, bootstrap |
 | test_channels | 11 | Source parsing, truncation |
 | test_cli | 13 | Argument parsing, routing |
 | test_memory | 10 | Store, search, import/export |
@@ -525,51 +473,6 @@ bash tests/test_hooks.sh
 | test_dedup | 13 | TTL cache, expiry, cleanup |
 | test_integration | 11 | Live API, multi-turn |
 | test_compat | 10 | Bash 3.2 verification |
-
-## Bash 3.2 Compatibility
-
-All code runs on the Bash that ships with every Mac since 2006:
-
-- No `declare -A` (associative arrays) -- uses file-based storage
-- No `declare -g` (global declarations) -- uses module-level vars
-- No `mapfile` / `readarray` -- uses while-read loops
-- No `&>>` redirect -- uses `>> file 2>&1`
-- No `|&` pipe shorthand -- uses `2>&1 |`
-
-This means bashclaw works on:
-- Every macOS version ever shipped (no Homebrew required)
-- Any Linux with bash installed
-- Android Termux (no root required)
-- Windows WSL
-- Minimal containers (Alpine + bash)
-- Raspberry Pi, embedded systems
-
-## Design Decisions
-
-### What was removed from OpenClaw
-
-1. **Config validation**: 6 Zod passes with 234 `.strict()` calls -> single `jq empty`
-2. **Session management**: Complex merge/cache layers -> direct JSONL file ops
-3. **Avatar resolution**: Base64 image encoding per request -> eliminated
-4. **Logging**: 10,000+ line tslog with per-log color hashing -> `printf` + level check
-5. **Tool loading**: Lazy-loaded module registry -> direct function dispatch
-6. **Channel routing**: 8-adapter polymorphic interfaces -> simple case/function
-7. **Startup**: 40+ async initialization steps -> instant `source` (< 100ms)
-
-### What was preserved from OpenClaw
-
-All the things that make OpenClaw great:
-
-- 7-level message routing with bindings
-- Multi-channel gateway architecture
-- JSONL session persistence with compaction
-- Workspace files (SOUL.md, MEMORY.md, BOOT.md)
-- Heartbeat system with active hours
-- Plugin system (4 discovery sources)
-- Skills system (SKILL.md per agent)
-- Advanced cron (at/every/cron + backoff)
-- 8-layer security model
-- Process queue with typed lanes
 
 ## License
 

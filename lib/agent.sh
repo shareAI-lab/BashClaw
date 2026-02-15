@@ -122,9 +122,14 @@ agent_resolve_provider() {
 
   # Infer provider from model name patterns
   case "$model" in
-    claude-*|claude3*) printf 'anthropic'; return ;;
-    gpt-*|o1*|o3*|o4*) printf 'openai'; return ;;
-    gemini-*)          printf 'google'; return ;;
+    claude-*|claude3*)       printf 'anthropic'; return ;;
+    gpt-*|o1*|o3*|o4*)      printf 'openai'; return ;;
+    gemini-*)                printf 'google'; return ;;
+    deepseek-*)              printf 'deepseek'; return ;;
+    qwen-*|qwq-*)           printf 'qwen'; return ;;
+    glm-*)                   printf 'zhipu'; return ;;
+    moonshot-*|kimi-*)       printf 'moonshot'; return ;;
+    MiniMax-*|abab*)         printf 'minimax'; return ;;
   esac
 
   # If OPENROUTER_API_KEY is set and model is unknown, assume openrouter
@@ -136,42 +141,77 @@ agent_resolve_provider() {
   printf 'anthropic'
 }
 
+# Data-driven API key resolution from models.json providers section
 agent_resolve_api_key() {
   local provider="$1"
 
-  case "$provider" in
-    anthropic)
-      local key="${ANTHROPIC_API_KEY:-}"
-      if [[ -z "$key" ]]; then
-        log_fatal "ANTHROPIC_API_KEY is required for Anthropic provider"
-      fi
-      printf '%s' "$key"
-      ;;
-    openai)
-      local key="${OPENAI_API_KEY:-}"
-      if [[ -z "$key" ]]; then
-        log_fatal "OPENAI_API_KEY is required for OpenAI provider"
-      fi
-      printf '%s' "$key"
-      ;;
-    google)
-      local key="${GOOGLE_API_KEY:-}"
-      if [[ -z "$key" ]]; then
-        log_fatal "GOOGLE_API_KEY is required for Google provider"
-      fi
-      printf '%s' "$key"
-      ;;
-    openrouter)
-      local key="${OPENROUTER_API_KEY:-}"
-      if [[ -z "$key" ]]; then
-        log_fatal "OPENROUTER_API_KEY is required for OpenRouter provider"
-      fi
-      printf '%s' "$key"
-      ;;
-    *)
-      log_fatal "Unknown provider: $provider"
-      ;;
-  esac
+  require_command jq "agent_resolve_api_key requires jq"
+
+  local catalog
+  catalog="$(_models_catalog_load)"
+
+  # Look up the env var name for this provider from models.json
+  local key_env
+  key_env="$(printf '%s' "$catalog" | jq -r --arg p "$provider" \
+    '.providers[$p].api_key_env // empty' 2>/dev/null)"
+
+  if [[ -z "$key_env" ]]; then
+    log_fatal "Unknown provider: $provider (not found in models.json)"
+  fi
+
+  # Read the actual key value from the environment
+  local key
+  eval "key=\"\${${key_env}:-}\""
+
+  if [[ -z "$key" ]]; then
+    log_fatal "${key_env} is required for ${provider} provider"
+  fi
+  printf '%s' "$key"
+}
+
+# Data-driven API base URL resolution from models.json
+_provider_api_url() {
+  local provider="$1"
+
+  local catalog
+  catalog="$(_models_catalog_load)"
+
+  # Check for env var override first
+  local url_env
+  url_env="$(printf '%s' "$catalog" | jq -r --arg p "$provider" \
+    '.providers[$p].api_url_env // empty' 2>/dev/null)"
+
+  if [[ -n "$url_env" ]]; then
+    local url_override
+    eval "url_override=\"\${${url_env}:-}\""
+    if [[ -n "$url_override" ]]; then
+      printf '%s' "$url_override"
+      return
+    fi
+  fi
+
+  # Fall back to default URL
+  local url_default
+  url_default="$(printf '%s' "$catalog" | jq -r --arg p "$provider" \
+    '.providers[$p].api_url_default // empty' 2>/dev/null)"
+  printf '%s' "$url_default"
+}
+
+# Resolve the API format for a provider (anthropic, openai, google)
+_provider_api_format() {
+  local provider="$1"
+
+  local catalog
+  catalog="$(_models_catalog_load)"
+  local fmt
+  fmt="$(printf '%s' "$catalog" | jq -r --arg p "$provider" \
+    '.providers[$p].api_format // empty' 2>/dev/null)"
+
+  if [[ -z "$fmt" ]]; then
+    printf 'openai'
+  else
+    printf '%s' "$fmt"
+  fi
 }
 
 # Resolve the next fallback model from the configured fallback chain.
@@ -615,7 +655,9 @@ agent_run_memory_flush() {
   tools_json="$(agent_build_tools_spec "$agent_id")"
 
   local response
-  case "$provider" in
+  local api_format
+  api_format="$(_provider_api_format "$provider")"
+  case "$api_format" in
     anthropic)
       response="$(agent_call_anthropic "$model" "$flush_system" "$messages" "$max_tokens" "$AGENT_DEFAULT_TEMPERATURE" "$tools_json" 2>/dev/null)" || true
       ;;
@@ -625,11 +667,8 @@ agent_run_memory_flush() {
     google)
       response="$(agent_call_google "$model" "$flush_system" "$messages" "$max_tokens" "$AGENT_DEFAULT_TEMPERATURE" "$tools_json" 2>/dev/null)" || true
       ;;
-    openrouter)
-      response="$(agent_call_openrouter "$model" "$flush_system" "$messages" "$max_tokens" "$AGENT_DEFAULT_TEMPERATURE" "$tools_json" 2>/dev/null)" || true
-      ;;
     *)
-      log_warn "Memory flush: unsupported provider $provider"
+      log_warn "Memory flush: unsupported api format $api_format (provider=$provider)"
       return 1
       ;;
   esac
@@ -766,7 +805,17 @@ agent_call_openai() {
   local api_key
   api_key="$(agent_resolve_api_key "openai")"
 
-  local api_url="${OPENAI_BASE_URL:-https://api.openai.com}/v1/chat/completions"
+  local provider
+  provider="$(agent_resolve_provider "$model")"
+  local api_base
+  api_base="$(_provider_api_url "$provider")"
+  if [[ -z "$api_base" ]]; then
+    api_base="${OPENAI_BASE_URL:-https://api.openai.com}"
+  fi
+  local api_key_resolved
+  api_key_resolved="$(agent_resolve_api_key "$provider")"
+
+  local api_url="${api_base}/v1/chat/completions"
 
   local oai_messages
   oai_messages="$(printf '%s' "$messages" | jq --arg sys "$system_prompt" \
@@ -827,7 +876,7 @@ agent_call_openai() {
 
     http_code="$(curl -sS --max-time 120 \
       -o "$response_file" -w '%{http_code}' \
-      -H "Authorization: Bearer ${api_key}" \
+      -H "Authorization: Bearer ${api_key_resolved}" \
       -H "Content-Type: application/json" \
       -d "$body" \
       "$api_url" 2>/dev/null)" || true
@@ -1316,7 +1365,9 @@ agent_run() {
     # Call API
     local response
     local api_call_failed="false"
-    case "$current_provider" in
+    local api_format
+    api_format="$(_provider_api_format "$current_provider")"
+    case "$api_format" in
       anthropic)
         response="$(agent_call_anthropic "$current_model" "$system_prompt" "$messages" "$max_tokens" "$AGENT_DEFAULT_TEMPERATURE" "$tools_json" 2>&1)" || api_call_failed="true"
         ;;
@@ -1326,11 +1377,8 @@ agent_run() {
       google)
         response="$(agent_call_google "$current_model" "$system_prompt" "$messages" "$max_tokens" "$AGENT_DEFAULT_TEMPERATURE" "$tools_json" 2>&1)" || api_call_failed="true"
         ;;
-      openrouter)
-        response="$(agent_call_openrouter "$current_model" "$system_prompt" "$messages" "$max_tokens" "$AGENT_DEFAULT_TEMPERATURE" "$tools_json" 2>&1)" || api_call_failed="true"
-        ;;
       *)
-        log_error "Unsupported provider: $current_provider"
+        log_error "Unsupported API format: $api_format (provider=$current_provider)"
         printf '{"error": "unsupported provider: %s"}' "$current_provider"
         return 1
         ;;

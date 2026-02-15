@@ -79,10 +79,10 @@ result="$(agent_resolve_provider "gpt-4o")"
 assert_eq "$result" "openai"
 teardown_test_env
 
-test_start "agent_resolve_provider returns anthropic for glm-5"
+test_start "agent_resolve_provider returns zhipu for glm models"
 setup_test_env
-result="$(agent_resolve_provider "glm-5")"
-assert_eq "$result" "anthropic"
+result="$(agent_resolve_provider "glm-4.7-flash")"
+assert_eq "$result" "zhipu"
 teardown_test_env
 
 test_start "agent_resolve_provider returns anthropic for unknown models"
