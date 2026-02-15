@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Skills system for bashclaw
 # Skills are prompt-level capabilities: directories containing SKILL.md and skill.json.
-# Compatible with bash 3.2+ (no declare -A, no declare -g, no mapfile)
+# Compatible with bash 3.2+ (no associative arrays, no global declares, no mapfile)
 
 # Discover available skills for an agent.
 # Scans ${BASHCLAW_STATE_DIR}/agents/${agent_id}/skills/ for skill directories.

@@ -3,6 +3,46 @@
 # Audit logging, pairing codes, rate limiting, exec approval,
 # tool policy, elevated policy, command auth (Gaps 9.1, 9.2, 9.3)
 
+# Timing-safe string comparison using HMAC.
+# Compares two strings in constant time to prevent timing side-channel attacks.
+# Returns 0 if equal, 1 otherwise.
+_security_safe_equal() {
+  local a="$1"
+  local b="$2"
+
+  if [[ "${#a}" -ne "${#b}" ]]; then
+    # Lengths differ, but still do a full HMAC comparison
+    # to avoid leaking length info via timing
+    :
+  fi
+
+  local hmac_key
+  hmac_key="bashclaw_compare_$$_$(date +%s)"
+
+  local hash_a hash_b
+  if command -v openssl >/dev/null 2>&1; then
+    hash_a="$(printf '%s' "$a" | openssl dgst -sha256 -hmac "$hmac_key" 2>/dev/null | awk '{print $NF}')"
+    hash_b="$(printf '%s' "$b" | openssl dgst -sha256 -hmac "$hmac_key" 2>/dev/null | awk '{print $NF}')"
+  elif command -v shasum >/dev/null 2>&1; then
+    hash_a="$(printf '%s%s' "$hmac_key" "$a" | shasum -a 256 2>/dev/null | awk '{print $1}')"
+    hash_b="$(printf '%s%s' "$hmac_key" "$b" | shasum -a 256 2>/dev/null | awk '{print $1}')"
+  elif command -v sha256sum >/dev/null 2>&1; then
+    hash_a="$(printf '%s%s' "$hmac_key" "$a" | sha256sum 2>/dev/null | awk '{print $1}')"
+    hash_b="$(printf '%s%s' "$hmac_key" "$b" | sha256sum 2>/dev/null | awk '{print $1}')"
+  else
+    # No hash tool available, fall back to direct comparison
+    if [[ "$a" == "$b" ]]; then
+      return 0
+    fi
+    return 1
+  fi
+
+  if [[ "$hash_a" == "$hash_b" ]]; then
+    return 0
+  fi
+  return 1
+}
+
 # Append an audit event to the audit log (JSONL format)
 security_audit_log() {
   local event="${1:?event required}"
@@ -38,9 +78,15 @@ security_pairing_code_generate() {
   local pair_dir="${BASHCLAW_STATE_DIR:?}/pairing"
   ensure_dir "$pair_dir"
 
-  # Generate 6-digit numeric code
+  # Generate 6-digit numeric code from /dev/urandom
   local code
-  code="$(printf '%06d' "$((RANDOM * RANDOM % 1000000))")"
+  if [[ -r /dev/urandom ]]; then
+    local raw_bytes
+    raw_bytes="$(od -A n -t u4 -N 4 /dev/urandom 2>/dev/null | tr -d ' ')"
+    code="$(printf '%06d' "$((raw_bytes % 1000000))")"
+  else
+    code="$(printf '%06d' "$((RANDOM * 32768 + RANDOM))")"
+  fi
   local now
   now="$(date +%s)"
   local expiry=$((now + 300))
@@ -58,7 +104,7 @@ security_pairing_code_generate() {
     '{channel: $ch, sender: $snd, code: $code, expires_at: $exp, created_at: $ts}' \
     > "$file"
 
-  chmod 600 "$file"
+  chmod 600 "$file" 2>/dev/null || true
   security_audit_log "pairing_code_generated" "channel=$channel sender=$sender"
 
   printf '%s' "$code"
@@ -84,8 +130,12 @@ security_pairing_code_verify() {
   fi
 
   local stored_code expiry
-  stored_code="$(jq -r '.code // empty' < "$file")"
-  expiry="$(jq -r '.expires_at // 0' < "$file")"
+  local parsed
+  parsed="$(jq -r '[(.code // ""), (.expires_at // 0 | tostring)] | join("\n")' < "$file")"
+  {
+    IFS= read -r stored_code
+    IFS= read -r expiry
+  } <<< "$parsed"
 
   local now
   now="$(date +%s)"
@@ -97,8 +147,8 @@ security_pairing_code_verify() {
     return 1
   fi
 
-  # Check code match
-  if [[ "$code" != "$stored_code" ]]; then
+  # Check code match (timing-safe)
+  if ! _security_safe_equal "$code" "$stored_code"; then
     security_audit_log "pairing_code_verify_failed" "channel=$channel sender=$sender reason=mismatch"
     return 1
   fi

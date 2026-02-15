@@ -107,7 +107,17 @@ session_key() {
   local agent_id="$1"
   local channel="${2:-default}"
   local sender="${3:-}"
-  printf 'agent:%s:%s:%s' "$agent_id" "$channel" "$sender"
+  local session_type="${4:-direct}"
+
+  # Normalize sender
+  sender="$(session_resolve_identity "$channel" "$sender")"
+
+  # Structured key format: agent:AGENT_ID:CHANNEL:TYPE:PEER_ID
+  if [[ -n "$sender" ]]; then
+    printf 'agent:%s:%s:%s:%s' "$agent_id" "$channel" "$session_type" "$sender"
+  else
+    printf 'agent:%s:%s:%s' "$agent_id" "$channel" "$session_type"
+  fi
 }
 
 session_append() {
@@ -390,7 +400,7 @@ session_meta_load() {
 
   ensure_dir "$(dirname "$meta_file")"
   printf '%s\n' "$meta" > "$meta_file"
-  chmod 600 "$meta_file"
+  chmod 600 "$meta_file" 2>/dev/null || true
   printf '%s' "$meta"
 }
 
@@ -541,6 +551,12 @@ session_compact() {
       ;;
     openai)
       summary_response="$(agent_call_openai "$model" "You are a conversation summarizer." "$compact_messages" 2048 0.3 "" 2>/dev/null)" || true
+      ;;
+    google)
+      summary_response="$(agent_call_google "$model" "You are a conversation summarizer." "$compact_messages" 2048 0.3 "" 2>/dev/null)" || true
+      ;;
+    openrouter)
+      summary_response="$(agent_call_openrouter "$model" "You are a conversation summarizer." "$compact_messages" 2048 0.3 "" 2>/dev/null)" || true
       ;;
     *)
       log_error "Unsupported provider for compaction: $provider"

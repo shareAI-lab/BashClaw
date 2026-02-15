@@ -14,7 +14,7 @@ if ! declare -f log_info &>/dev/null; then
   source "${SCRIPT_DIR}/lib/routing.sh"
 
   # Load .env if present
-  local env_file="${BASHCLAW_STATE_DIR:?}/.env"
+  env_file="${BASHCLAW_STATE_DIR:?}/.env"
   if [[ -f "$env_file" ]]; then
     set -a
     source "$env_file"
@@ -183,11 +183,22 @@ _handle_chat() {
     return
   fi
 
+  # Parse all fields from body in a single jq call
+  local parsed
+  parsed="$(printf '%s' "$HTTP_BODY" | jq -r '[
+    (.message // ""),
+    (.agent // "main"),
+    (.channel // "web"),
+    (.sender // "http")
+  ] | join("\n")' 2>/dev/null)"
+
   local message agent_id channel sender
-  message="$(printf '%s' "$HTTP_BODY" | jq -r '.message // empty' 2>/dev/null)"
-  agent_id="$(printf '%s' "$HTTP_BODY" | jq -r '.agent // "main"' 2>/dev/null)"
-  channel="$(printf '%s' "$HTTP_BODY" | jq -r '.channel // "web"' 2>/dev/null)"
-  sender="$(printf '%s' "$HTTP_BODY" | jq -r '.sender // "http"' 2>/dev/null)"
+  {
+    IFS= read -r message
+    IFS= read -r agent_id
+    IFS= read -r channel
+    IFS= read -r sender
+  } <<< "$parsed"
 
   if [[ -z "$message" ]]; then
     _http_respond_json 400 '{"error":"message field is required"}'
@@ -210,15 +221,23 @@ _handle_chat() {
 _handle_session_clear() {
   require_command jq "session clear handler requires jq"
 
-  local agent_id channel sender
+  local agent_id="main"
+  local channel="web"
+  local sender="http"
+
   if [[ -n "$HTTP_BODY" ]]; then
-    agent_id="$(printf '%s' "$HTTP_BODY" | jq -r '.agent // "main"' 2>/dev/null)"
-    channel="$(printf '%s' "$HTTP_BODY" | jq -r '.channel // "web"' 2>/dev/null)"
-    sender="$(printf '%s' "$HTTP_BODY" | jq -r '.sender // "http"' 2>/dev/null)"
-  else
-    agent_id="main"
-    channel="web"
-    sender="http"
+    local parsed
+    parsed="$(printf '%s' "$HTTP_BODY" | jq -r '[
+      (.agent // "main"),
+      (.channel // "web"),
+      (.sender // "http")
+    ] | join("\n")' 2>/dev/null)"
+
+    {
+      IFS= read -r agent_id
+      IFS= read -r channel
+      IFS= read -r sender
+    } <<< "$parsed"
   fi
 
   local sess_file
@@ -236,10 +255,19 @@ _handle_message_send() {
     return
   fi
 
+  local parsed
+  parsed="$(printf '%s' "$HTTP_BODY" | jq -r '[
+    (.channel // ""),
+    (.target // ""),
+    (.message // "")
+  ] | join("\n")' 2>/dev/null)"
+
   local ch target text
-  ch="$(printf '%s' "$HTTP_BODY" | jq -r '.channel // empty' 2>/dev/null)"
-  target="$(printf '%s' "$HTTP_BODY" | jq -r '.target // empty' 2>/dev/null)"
-  text="$(printf '%s' "$HTTP_BODY" | jq -r '.message // empty' 2>/dev/null)"
+  {
+    IFS= read -r ch
+    IFS= read -r target
+    IFS= read -r text
+  } <<< "$parsed"
 
   if [[ -z "$ch" || -z "$target" || -z "$text" ]]; then
     _http_respond_json 400 '{"error":"channel, target, and message are required"}'

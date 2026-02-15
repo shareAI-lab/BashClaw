@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Heartbeat system for bashclaw
 # Periodic autonomous agent check-ins with active-hours gating.
-# Compatible with bash 3.2+ (no declare -A, no declare -g, no mapfile)
+# Compatible with bash 3.2+ (no associative arrays, no global declares, no mapfile)
 
 DEFAULT_HEARTBEAT_INTERVAL=1800
 HEARTBEAT_OK_TOKEN="HEARTBEAT_OK"

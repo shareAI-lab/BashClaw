@@ -111,7 +111,7 @@ _onboard_api_key() {
         fi
       fi
       printf 'ANTHROPIC_API_KEY=%s\n' "$api_key" >> "$env_file"
-      chmod 600 "$env_file"
+      chmod 600 "$env_file" 2>/dev/null || true
       printf 'API key saved to %s\n' "$env_file"
       ;;
     2)
@@ -133,7 +133,7 @@ _onboard_api_key() {
         fi
       fi
       printf 'OPENAI_API_KEY=%s\n' "$api_key" >> "$env_file"
-      chmod 600 "$env_file"
+      chmod 600 "$env_file" 2>/dev/null || true
       config_set '.agents.defaults.model' '"gpt-4o"'
       printf 'API key saved to %s\n' "$env_file"
       ;;
@@ -237,7 +237,7 @@ onboard_channel() {
       fi
       local env_file="${BASHCLAW_STATE_DIR:?}/.env"
       printf 'BASHCLAW_TELEGRAM_TOKEN=%s\n' "$token" >> "$env_file"
-      chmod 600 "$env_file"
+      chmod 600 "$env_file" 2>/dev/null || true
       config_set '.channels.telegram' '{"enabled": true}'
       printf 'Telegram configured.\n'
       ;;
@@ -251,7 +251,7 @@ onboard_channel() {
       fi
       local env_file="${BASHCLAW_STATE_DIR:?}/.env"
       printf 'BASHCLAW_DISCORD_TOKEN=%s\n' "$token" >> "$env_file"
-      chmod 600 "$env_file"
+      chmod 600 "$env_file" 2>/dev/null || true
 
       printf 'Enter Discord channel IDs to monitor (comma-separated): '
       local channel_ids
@@ -286,7 +286,7 @@ onboard_channel() {
             return 0
           fi
           printf 'BASHCLAW_SLACK_TOKEN=%s\n' "$token" >> "$env_file"
-          chmod 600 "$env_file"
+          chmod 600 "$env_file" 2>/dev/null || true
 
           printf 'Enter Slack channel IDs to monitor (comma-separated): '
           local channel_ids
@@ -309,7 +309,7 @@ onboard_channel() {
             return 0
           fi
           printf 'BASHCLAW_SLACK_WEBHOOK_URL=%s\n' "$url" >> "$env_file"
-          chmod 600 "$env_file"
+          chmod 600 "$env_file" 2>/dev/null || true
           config_set '.channels.slack' '{"enabled": true}'
           ;;
       esac

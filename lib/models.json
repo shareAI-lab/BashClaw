@@ -1,0 +1,138 @@
+{
+  "models": {
+    "claude-opus-4-20250918": {
+      "provider": "anthropic",
+      "max_tokens": 4096,
+      "context_window": 200000,
+      "supports_images": true,
+      "supports_thinking": true
+    },
+    "claude-sonnet-4-20250514": {
+      "provider": "anthropic",
+      "max_tokens": 8192,
+      "context_window": 200000,
+      "supports_images": true,
+      "supports_thinking": true
+    },
+    "claude-haiku-3-20250307": {
+      "provider": "anthropic",
+      "max_tokens": 4096,
+      "context_window": 200000,
+      "supports_images": true,
+      "supports_thinking": false
+    },
+    "glm-5": {
+      "provider": "anthropic",
+      "max_tokens": 4096,
+      "context_window": 128000,
+      "supports_images": false,
+      "supports_thinking": false
+    },
+    "gpt-4o": {
+      "provider": "openai",
+      "max_tokens": 4096,
+      "context_window": 128000,
+      "supports_images": true,
+      "supports_thinking": false
+    },
+    "gpt-4o-mini": {
+      "provider": "openai",
+      "max_tokens": 4096,
+      "context_window": 128000,
+      "supports_images": true,
+      "supports_thinking": false
+    },
+    "gpt-4-turbo": {
+      "provider": "openai",
+      "max_tokens": 4096,
+      "context_window": 128000,
+      "supports_images": true,
+      "supports_thinking": false
+    },
+    "o1": {
+      "provider": "openai",
+      "max_tokens": 4096,
+      "context_window": 200000,
+      "supports_images": false,
+      "supports_thinking": true
+    },
+    "o1-mini": {
+      "provider": "openai",
+      "max_tokens": 4096,
+      "context_window": 128000,
+      "supports_images": false,
+      "supports_thinking": true
+    },
+    "o3-mini": {
+      "provider": "openai",
+      "max_tokens": 4096,
+      "context_window": 128000,
+      "supports_images": false,
+      "supports_thinking": true
+    },
+    "gemini-2.0-flash": {
+      "provider": "google",
+      "max_tokens": 8192,
+      "context_window": 1048576,
+      "supports_images": true,
+      "supports_thinking": true
+    },
+    "gemini-2.0-flash-lite": {
+      "provider": "google",
+      "max_tokens": 8192,
+      "context_window": 1048576,
+      "supports_images": true,
+      "supports_thinking": false
+    },
+    "gemini-1.5-pro": {
+      "provider": "google",
+      "max_tokens": 8192,
+      "context_window": 2097152,
+      "supports_images": true,
+      "supports_thinking": false
+    },
+    "gemini-1.5-flash": {
+      "provider": "google",
+      "max_tokens": 8192,
+      "context_window": 1048576,
+      "supports_images": true,
+      "supports_thinking": false
+    }
+  },
+  "aliases": {
+    "fast": "gemini-2.0-flash",
+    "smart": "claude-opus-4-20250918",
+    "balanced": "claude-sonnet-4-20250514",
+    "cheap": "gpt-4o-mini",
+    "claude": "claude-sonnet-4-20250514",
+    "gpt": "gpt-4o",
+    "gemini": "gemini-2.0-flash",
+    "opus": "claude-opus-4-20250918",
+    "sonnet": "claude-sonnet-4-20250514",
+    "haiku": "claude-haiku-3-20250307",
+    "flash": "gemini-2.0-flash"
+  },
+  "providers": {
+    "anthropic": {
+      "api_url_env": "ANTHROPIC_BASE_URL",
+      "api_url_default": "https://api.anthropic.com",
+      "api_key_env": "ANTHROPIC_API_KEY",
+      "api_version": "2023-06-01"
+    },
+    "openai": {
+      "api_url_env": "OPENAI_BASE_URL",
+      "api_url_default": "https://api.openai.com",
+      "api_key_env": "OPENAI_API_KEY"
+    },
+    "google": {
+      "api_url_env": "GOOGLE_AI_BASE_URL",
+      "api_url_default": "https://generativelanguage.googleapis.com",
+      "api_key_env": "GOOGLE_API_KEY"
+    },
+    "openrouter": {
+      "api_url_env": "OPENROUTER_BASE_URL",
+      "api_url_default": "https://openrouter.ai/api",
+      "api_key_env": "OPENROUTER_API_KEY"
+    }
+  }
+}

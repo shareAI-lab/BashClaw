@@ -115,7 +115,7 @@ memory_store() {
     '{key: $k, value: $v, tags: $tags, source: $src, created_at: $ca, updated_at: $ua, access_count: $ac}' \
     > "$file"
 
-  chmod 600 "$file"
+  chmod 600 "$file" 2>/dev/null || true
   log_debug "Memory stored: key=$key"
 }
 

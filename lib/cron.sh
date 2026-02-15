@@ -2,7 +2,7 @@
 # Advanced cron system for bashclaw
 # Supports three schedule types (at/every/cron), exponential backoff,
 # stuck job detection, isolated sessions, and concurrent run limits.
-# Compatible with bash 3.2+ (no declare -A, no declare -g, no mapfile)
+# Compatible with bash 3.2+ (no associative arrays, no global declares, no mapfile)
 
 CRON_DEFAULT_MAX_CONCURRENT=1
 CRON_DEFAULT_JOB_TIMEOUT=600

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Process/command queue module for bashclaw
 # Dual-layer queue with typed lanes and queue modes.
-# Compatible with bash 3.2+ (no declare -A, no declare -g, no mapfile)
+# Compatible with bash 3.2+ (no associative arrays, no global declares, no mapfile)
 
 _QUEUE_DIR=""
 
@@ -121,7 +121,7 @@ process_worker() {
       _queue_mark_done "$item_id" "completed" "${result:0:500}"
     ) &
 
-    sleep 0.5
+    sleep 1
   done
 }
 

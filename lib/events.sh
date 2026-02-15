@@ -2,7 +2,7 @@
 # System events queue for bashclaw
 # Background processes enqueue events; agent drains them on next turn.
 # File-based FIFO queue with dedup and max capacity.
-# Compatible with bash 3.2+ (no declare -A, no declare -g, no mapfile)
+# Compatible with bash 3.2+ (no associative arrays, no global declares, no mapfile)
 
 EVENTS_MAX_PER_SESSION=20
 

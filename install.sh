@@ -311,7 +311,7 @@ _create_default_config() {
 }
 CONFIGEOF
 
-  chmod 600 "$config_file"
+  chmod 600 "$config_file" 2>/dev/null || true
   _info "Created default config: $config_file"
 }
 

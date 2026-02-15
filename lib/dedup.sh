@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Idempotency / deduplication cache for bashclaw
 # File-based cache stored in ${BASHCLAW_STATE_DIR}/dedup/
-# Compatible with bash 3.2+ (no declare -A, no declare -g, no mapfile)
+# Compatible with bash 3.2+ (no associative arrays, no global declares, no mapfile)
 
 _DEDUP_DIR=""
 
@@ -77,7 +77,7 @@ dedup_record() {
     '{key: $key, result: $result, timestamp: ($ts | tonumber)}' \
     > "$file"
 
-  chmod 600 "$file"
+  chmod 600 "$file" 2>/dev/null || true
 }
 
 # Retrieve the cached result for a key.

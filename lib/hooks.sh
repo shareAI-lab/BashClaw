@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Hook/middleware system for bashclaw
 # Supports 14 event types, execution strategies, and priority ordering.
-# Compatible with bash 3.2+ (no declare -A, no declare -g, no mapfile)
+# Compatible with bash 3.2+ (no associative arrays, no global declares, no mapfile)
 
 # All supported hook events:
 #   pre_message        - before message is processed
@@ -138,7 +138,7 @@ hooks_register() {
     '{name: $name, event: $event, script: $script, enabled: true, priority: $pri, strategy: $strategy, source: $source, created_at: $ca}' \
     > "$file"
 
-  chmod 600 "$file"
+  chmod 600 "$file" 2>/dev/null || true
   log_info "Hook registered: name=$name event=$event priority=$priority strategy=$strategy"
 }
 

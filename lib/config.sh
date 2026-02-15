@@ -4,6 +4,7 @@
 
 _CONFIG_CACHE=""
 _CONFIG_PATH=""
+_CONFIG_MTIME=""
 
 config_path() {
   if [[ -n "${BASHCLAW_CONFIG:-}" ]]; then
@@ -22,13 +23,21 @@ config_load() {
   path="$(_config_resolve_path)"
   if [[ ! -f "$path" ]]; then
     _CONFIG_CACHE="{}"
+    _CONFIG_MTIME=""
     return 0
   fi
   _CONFIG_CACHE="$(cat "$path")"
   if ! printf '%s' "$_CONFIG_CACHE" | jq empty 2>/dev/null; then
     log_error "Invalid JSON in config: $path"
     _CONFIG_CACHE="{}"
+    _CONFIG_MTIME=""
     return 1
+  fi
+  # Track mtime for staleness check
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    _CONFIG_MTIME="$(stat -f%m "$path" 2>/dev/null)" || _CONFIG_MTIME=""
+  else
+    _CONFIG_MTIME="$(stat -c%Y "$path" 2>/dev/null)" || _CONFIG_MTIME=""
   fi
 }
 
@@ -72,7 +81,7 @@ config_set() {
   _CONFIG_CACHE="$(printf '%s' "$_CONFIG_CACHE" | jq "$filter = $value")"
   ensure_dir "$(dirname "$path")"
   printf '%s\n' "$_CONFIG_CACHE" > "$path"
-  chmod 600 "$path"
+  chmod 600 "$path" 2>/dev/null || true
 }
 
 config_validate() {
@@ -90,15 +99,19 @@ config_validate() {
     return 1
   fi
 
+  local errors=0
+
+  # Validate gateway.port
   local port
   port="$(printf '%s' "$content" | jq -r '.gateway.port // empty' 2>/dev/null)"
   if [[ -n "$port" ]]; then
     if ! [[ "$port" =~ ^[0-9]+$ ]] || (( port < 1 || port > 65535 )); then
       log_error "Invalid gateway port: $port (must be 1-65535)"
-      return 1
+      errors=$((errors + 1))
     fi
   fi
 
+  # Validate agents structure
   local agents_type
   agents_type="$(printf '%s' "$content" | jq -r '.agents | type' 2>/dev/null)"
   if [[ "$agents_type" == "object" ]]; then
@@ -106,14 +119,96 @@ config_validate() {
     list_type="$(printf '%s' "$content" | jq -r '.agents.list | type' 2>/dev/null)"
     if [[ "$list_type" != "null" && "$list_type" != "array" ]]; then
       log_error "agents.list must be an array"
-      return 1
+      errors=$((errors + 1))
+    fi
+
+    # Validate each agent in list has required 'id' field
+    local agent_errors
+    agent_errors="$(printf '%s' "$content" | jq -r '
+      [(.agents.list // [])[] | select(.id == null or .id == "")] | length
+    ' 2>/dev/null)"
+    if [[ "$agent_errors" != "0" && -n "$agent_errors" ]]; then
+      log_error "agents.list contains entries without 'id' field"
+      errors=$((errors + 1))
+    fi
+
+    # Validate agent model references
+    local invalid_models
+    invalid_models="$(printf '%s' "$content" | jq -r '
+      [(.agents.list // [])[] | select(.model != null and (.model | type) != "string")] | length
+    ' 2>/dev/null)"
+    if [[ "$invalid_models" != "0" && -n "$invalid_models" ]]; then
+      log_error "agents.list contains entries with non-string 'model' field"
+      errors=$((errors + 1))
     fi
   fi
 
+  # Validate channels structure
   local channels_type
   channels_type="$(printf '%s' "$content" | jq -r '.channels | type' 2>/dev/null)"
   if [[ "$channels_type" != "null" && "$channels_type" != "object" ]]; then
     log_error "channels must be an object"
+    errors=$((errors + 1))
+  fi
+
+  # Validate session config
+  local idle_reset
+  idle_reset="$(printf '%s' "$content" | jq -r '.session.idleResetMinutes // empty' 2>/dev/null)"
+  if [[ -n "$idle_reset" ]]; then
+    if ! [[ "$idle_reset" =~ ^[0-9]+$ ]]; then
+      log_error "session.idleResetMinutes must be an integer"
+      errors=$((errors + 1))
+    fi
+  fi
+
+  local max_history
+  max_history="$(printf '%s' "$content" | jq -r '.session.maxHistory // empty' 2>/dev/null)"
+  if [[ -n "$max_history" ]]; then
+    if ! [[ "$max_history" =~ ^[0-9]+$ ]]; then
+      log_error "session.maxHistory must be an integer"
+      errors=$((errors + 1))
+    fi
+  fi
+
+  # Validate dmScope enum
+  local dm_scope
+  dm_scope="$(printf '%s' "$content" | jq -r '.session.dmScope // empty' 2>/dev/null)"
+  if [[ -n "$dm_scope" ]]; then
+    case "$dm_scope" in
+      per-sender|per-channel-peer|per-peer|per-account-channel-peer|per-channel|main|global) ;;
+      *)
+        log_error "Invalid session.dmScope: $dm_scope (valid: per-sender, per-channel-peer, per-peer, per-account-channel-peer, per-channel, main, global)"
+        errors=$((errors + 1))
+        ;;
+    esac
+  fi
+
+  # Validate bindings is an array
+  local bindings_type
+  bindings_type="$(printf '%s' "$content" | jq -r '.bindings | type' 2>/dev/null)"
+  if [[ "$bindings_type" != "null" && "$bindings_type" != "array" ]]; then
+    log_error "bindings must be an array"
+    errors=$((errors + 1))
+  fi
+
+  # Validate identityLinks is an array
+  local links_type
+  links_type="$(printf '%s' "$content" | jq -r '.identityLinks | type' 2>/dev/null)"
+  if [[ "$links_type" != "null" && "$links_type" != "array" ]]; then
+    log_error "identityLinks must be an array"
+    errors=$((errors + 1))
+  fi
+
+  # Validate security structure
+  local security_type
+  security_type="$(printf '%s' "$content" | jq -r '.security | type' 2>/dev/null)"
+  if [[ "$security_type" != "null" && "$security_type" != "object" ]]; then
+    log_error "security must be an object"
+    errors=$((errors + 1))
+  fi
+
+  if (( errors > 0 )); then
+    log_error "Config validation failed with $errors error(s): $path"
     return 1
   fi
 
@@ -205,7 +300,7 @@ config_init_default() {
 }
 ENDJSON
 
-  chmod 600 "$path"
+  chmod 600 "$path" 2>/dev/null || true
   log_info "Created default config: $path"
 }
 
@@ -302,6 +397,7 @@ config_channel_get_raw() {
 
 config_reload() {
   _CONFIG_CACHE=""
+  _CONFIG_MTIME=""
   config_load
 }
 
@@ -318,5 +414,20 @@ _config_resolve_path() {
 _config_ensure_loaded() {
   if [[ -z "$_CONFIG_CACHE" ]]; then
     config_load
+    return
+  fi
+  # Check if config file has been modified
+  local path
+  path="$(_config_resolve_path)"
+  if [[ -f "$path" ]]; then
+    local current_mtime
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+      current_mtime="$(stat -f%m "$path" 2>/dev/null)" || current_mtime=""
+    else
+      current_mtime="$(stat -c%Y "$path" 2>/dev/null)" || current_mtime=""
+    fi
+    if [[ -n "$current_mtime" && "$current_mtime" != "$_CONFIG_MTIME" ]]; then
+      config_load
+    fi
   fi
 }

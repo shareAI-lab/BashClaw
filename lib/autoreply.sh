@@ -52,7 +52,7 @@ autoreply_add() {
     '{id: $id, pattern: $pat, response: $resp, channel_filter: $ch, enabled: true, priority: $pri, created_at: $ca}' \
     > "$file"
 
-  chmod 600 "$file"
+  chmod 600 "$file" 2>/dev/null || true
   log_info "Autoreply added: id=$id pattern=$pattern"
   printf '%s' "$id"
 }

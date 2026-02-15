@@ -368,13 +368,13 @@ teardown_test_env
 test_start "session_key format"
 setup_test_env
 key="$(session_key "main" "telegram" "user123")"
-assert_eq "$key" "agent:main:telegram:user123"
+assert_eq "$key" "agent:main:telegram:direct:user123"
 teardown_test_env
 
 test_start "session_key with empty sender"
 setup_test_env
 key="$(session_key "main" "discord")"
-assert_eq "$key" "agent:main:discord:"
+assert_eq "$key" "agent:main:discord:direct"
 teardown_test_env
 
 report_results
