@@ -69,12 +69,17 @@ gateway_start() {
   local health_pid=$!
 
   # Start the HTTP server (foreground)
-  if is_command_available websocat; then
-    gateway_run_websocat
-  elif is_command_available socat; then
-    gateway_run_http
+  if is_command_available socat; then
+    gateway_run_socat
+  elif is_command_available nc; then
+    gateway_run_nc
   else
-    gateway_run_bash_http
+    log_warn "No HTTP server available (need socat or nc)"
+    log_warn "Gateway is running but cannot serve HTTP."
+    log_warn "CLI and channel listeners will still work."
+    while [[ "$GATEWAY_RUNNING" == "true" ]]; do
+      sleep 10
+    done
   fi
 
   # Cleanup on exit
@@ -82,6 +87,7 @@ gateway_start() {
   kill "$channels_pid" "$cron_pid" "$health_pid" 2>/dev/null
   wait "$channels_pid" "$cron_pid" "$health_pid" 2>/dev/null
   rm -f "$GATEWAY_PID_FILE"
+  rm -f "${BASHCLAW_STATE_DIR:?}/gateway.fifo"
   log_info "Gateway stopped"
 }
 
@@ -172,48 +178,38 @@ gateway_handle_sigterm() {
 
 # ---- HTTP Servers ----
 
-gateway_run_websocat() {
-  log_info "Starting WebSocket server via websocat on port $GATEWAY_PORT"
-  websocat -s "$GATEWAY_PORT" --text -e \
-    sh -c 'source '"'"'${BASH_SOURCE[0]%/*}/../gateway/http_handler.sh'"'"' && handle_request' \
-    2>&1 || log_error "websocat exited"
-}
-
-gateway_run_http() {
+gateway_run_socat() {
   log_info "Starting HTTP server via socat on port $GATEWAY_PORT"
+  local handler_script
+  handler_script="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/gateway/http_handler.sh"
   socat TCP-LISTEN:"$GATEWAY_PORT",reuseaddr,fork \
-    EXEC:"bash ${BASH_SOURCE[0]%/*}/../gateway/http_handler.sh" \
+    EXEC:"bash '$handler_script'" \
     2>&1 || log_error "socat exited"
 }
 
-gateway_run_bash_http() {
+gateway_run_nc() {
   local handler_script
   handler_script="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/gateway/http_handler.sh"
 
-  if is_command_available nc; then
-    log_info "Starting HTTP server via nc on port $GATEWAY_PORT"
-    while [[ "$GATEWAY_RUNNING" == "true" ]]; do
-      # nc -l listens for one connection, pipes it through the handler script
-      # macOS nc: -l -p PORT; GNU nc: -l -p PORT or -l PORT
-      # Use a subshell to handle one request at a time
-      if [[ "$(uname -s)" == "Darwin" ]]; then
-        nc -l "$GATEWAY_PORT" -c "bash '$handler_script'" 2>/dev/null || \
-          bash -c "exec 3<>/dev/tcp/127.0.0.1/$GATEWAY_PORT 2>/dev/null; exec 3>&-" 2>/dev/null || \
-          true
-      else
-        nc -l -p "$GATEWAY_PORT" -e "bash '$handler_script'" 2>/dev/null || \
-          nc -l "$GATEWAY_PORT" -c "bash '$handler_script'" 2>/dev/null || \
-          true
-      fi
-    done
-  else
-    log_warn "No HTTP server available (need websocat, socat, or nc)"
-    log_warn "Gateway is running but cannot serve HTTP. Install socat: brew install socat"
-    log_warn "CLI and channel listeners will still work."
-    while [[ "$GATEWAY_RUNNING" == "true" ]]; do
-      sleep 10
-    done
+  local fifo_path="${BASHCLAW_STATE_DIR:?}/gateway.fifo"
+  rm -f "$fifo_path"
+  mkfifo "$fifo_path"
+
+  # Detect nc flavor: OpenBSD nc (macOS/Ubuntu) uses "nc -l PORT",
+  # GNU/BusyBox nc uses "nc -l -p PORT"
+  local nc_args="-l"
+  if nc -h 2>&1 | grep -q '\-p'; then
+    nc_args="-l -p"
   fi
+
+  log_info "Starting HTTP server via nc + FIFO on port $GATEWAY_PORT (nc_args='$nc_args')"
+
+  while [[ "$GATEWAY_RUNNING" == "true" ]]; do
+    nc $nc_args "$GATEWAY_PORT" < "$fifo_path" | \
+      bash "$handler_script" > "$fifo_path" 2>/dev/null || true
+  done
+
+  rm -f "$fifo_path"
 }
 
 # ---- Channel Listeners ----
@@ -443,7 +439,10 @@ Options:
   --stop             Stop running gateway daemon
   -h, --help         Show this help
 
-The gateway runs channel listeners, a cron runner, and an HTTP/WebSocket
-server for receiving messages.
+The gateway runs channel listeners, a cron runner, and an HTTP server
+for the web dashboard and API.
+
+HTTP server: socat (concurrent) or nc + FIFO (serial fallback).
+For production, put nginx/caddy in front as reverse proxy.
 EOF
 }

@@ -263,17 +263,14 @@ cmd_doctor() {
 
   # Check gateway HTTP server capability
   local http_server=""
-  if is_command_available websocat; then
-    printf '[OK]   websocat found (gateway: WebSocket + HTTP)\n'
-    http_server="websocat"
-  elif is_command_available socat; then
-    printf '[OK]   socat found (gateway: HTTP)\n'
+  if is_command_available socat; then
+    printf '[OK]   socat found (gateway: concurrent HTTP)\n'
     http_server="socat"
   elif is_command_available nc; then
-    printf '[OK]   nc found (gateway: basic HTTP fallback)\n'
+    printf '[OK]   nc found (gateway: serial HTTP via FIFO)\n'
     http_server="nc"
   else
-    printf '[WARN] No HTTP server tool found (websocat/socat/nc). Gateway will not serve HTTP.\n'
+    printf '[WARN] No HTTP server tool found (socat or nc). Gateway will not serve HTTP.\n'
     issues=$((issues + 1))
   fi
 
