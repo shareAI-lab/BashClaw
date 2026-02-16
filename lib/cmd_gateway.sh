@@ -203,8 +203,6 @@ gateway_run_nc() {
   handler_script="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/gateway/http_handler.sh"
 
   local fifo_path="${BASHCLAW_STATE_DIR:?}/gateway.fifo"
-  rm -f "$fifo_path"
-  mkfifo "$fifo_path"
 
   # Detect nc flavor: OpenBSD nc (macOS/Ubuntu) uses "nc -l PORT",
   # GNU/BusyBox nc uses "nc -l -p PORT"
@@ -214,8 +212,17 @@ gateway_run_nc() {
   fi
 
   log_info "Starting HTTP server via nc + FIFO on port $GATEWAY_PORT (nc_args='$nc_args')"
+  log_warn "nc handles one request at a time. Install socat for concurrent connections."
 
   while [[ "$GATEWAY_RUNNING" == "true" ]]; do
+    # Recreate FIFO each iteration for clean state between requests
+    rm -f "$fifo_path"
+    mkfifo "$fifo_path" 2>/dev/null || {
+      log_error "Failed to create FIFO at $fifo_path"
+      sleep 1
+      continue
+    }
+
     nc $nc_args "$GATEWAY_PORT" < "$fifo_path" | \
       bash "$handler_script" > "$fifo_path" 2>/dev/null || true
   done

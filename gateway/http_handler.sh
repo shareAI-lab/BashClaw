@@ -397,6 +397,7 @@ _handle_status() {
   model="$(agent_resolve_model "main" 2>/dev/null)" || model="unknown"
   local provider
   provider="$(agent_resolve_provider "$model" 2>/dev/null)" || provider="unknown"
+  provider="$(_provider_with_proxy_fallback "$provider" 2>/dev/null)" || true
 
   local channels_configured="[]"
   channels_configured="$(config_get_raw '.channels | keys // []' 2>/dev/null)" || channels_configured="[]"

@@ -9,7 +9,7 @@ Pure-shell AI agent runtime. No Node.js, no Python, no compiled binaries.
 <p>
   <img src="https://img.shields.io/badge/bash-3.2%2B_(2006)-4EAA25?logo=gnubash&logoColor=white" alt="Bash 3.2+" />
   <img src="https://img.shields.io/badge/deps-jq%20%2B%20curl-blue" alt="Dependencies" />
-  <img src="https://img.shields.io/badge/tests-334%20pass-brightgreen" alt="Tests" />
+  <img src="https://img.shields.io/badge/tests-all%20pass-brightgreen" alt="Tests" />
   <img src="https://img.shields.io/badge/RAM-%3C%2010MB-purple" alt="Memory" />
   <a href="https://opensource.org/licenses/MIT">
     <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT" />
@@ -68,7 +68,7 @@ bashclaw gateway                                     # web dashboard + channels
 | macOS out-of-box    | No (needs Node)  | Yes              |
 | Android Termux      | Complex          | pkg install jq   |
 | Hot self-modify     | No (needs build) | Yes              |
-| Tests               | Vitest           | 334 pass         |
+| Tests               | Vitest           | All pass         |
 +---------------------+------------------+------------------+
 ```
 
@@ -101,7 +101,7 @@ BashClaw targets Bash 3.2 deliberately: no `declare -A`, no `mapfile`, no `|&`. 
 - **14 hook events** -- Pre/post message, tool, compaction, session lifecycle. Modifying + sync strategies.
 - **Hot config reload** -- `kill -USR1` the gateway to reload without restart.
 - **Daemon support** -- systemd, launchd, Termux boot, crontab fallback.
-- **334 tests** -- Unit, compatibility (Bash 3.2 verification), integration. 473 assertions.
+- **Tested** -- Unit, compatibility, integration. `bash tests/run_all.sh`.
 
 ## Web Dashboard
 
@@ -112,23 +112,26 @@ bashclaw gateway
 ```
 
 ```
-+-------------------------------------------------------+
-|  BashClaw Dashboard          [Chat] [Settings] [Status]|
-+-------------------------------------------------------+
-|                                                        |
-|  You: What's the weather in Tokyo?                     |
-|                                                        |
-|  Agent: Let me check that for you...                   |
-|  [tool: web_search] ...                                |
-|  Currently 12C and partly cloudy in Tokyo.             |
-|                                                        |
-|  [____________________________________] [Send]         |
-+-------------------------------------------------------+
++------------------------------------------------------------------+
+|  BashClaw Dashboard    [Chat] [Status] [Agents] [Sessions] [Config] [Logs]|
++------------------------------------------------------------------+
+|                                                                   |
+|  You: What's the weather in Tokyo?                                |
+|                                                                   |
+|  Agent: Let me check that for you...                              |
+|  [tool: web_search] ...                                           |
+|  Currently 12C and partly cloudy in Tokyo.                        |
+|                                                                   |
+|  [____________________________________] [Send]                    |
++------------------------------------------------------------------+
 ```
 
-**Chat** -- Talk to the agent from the browser. No channel setup needed.
-**Settings** -- API keys, model selection, channel status. Keys stored server-side only.
-**Status** -- Gateway state, active sessions, provider info.
+**Chat** -- Talk to the agent from the browser. Markdown rendering, syntax highlight.
+**Status** -- Gateway state, active sessions, provider info, engine detection.
+**Agents** -- List and manage configured agents.
+**Sessions** -- Browse all sessions with message counts.
+**Config** -- API keys, model selection, channel status. Keys stored server-side only.
+**Logs** -- Live log viewer with level filtering.
 **First-run** -- If no API key is set, shows a setup overlay on first visit.
 
 ### Web + CLI Dual Mode
@@ -320,10 +323,10 @@ bashclaw gateway
 +------+------+        +-------+-------+        +-------+-------+
 | http_handler |       | SSRF filter   |        | plugin.sh     |
 | ui/index.html|       | rate limiting |        | skills.sh     |
-| ui/style.css |       | pairing codes |        | hooks.sh (14) |
-| ui/app.js    |       | tool policies |        | autoreply.sh  |
-| REST API (9) |       | RBAC + audit  |        | boot.sh       |
-+--------------+       +---------------+        | dedup.sh      |
+| OpenAI API   |       | pairing codes |        | hooks.sh (14) |
+| REST API (9) |       | tool policies |        | autoreply.sh  |
++--------------+       | RBAC + audit  |        | boot.sh       |
+                       +---------------+        | dedup.sh      |
                                                 +---------------+
 ```
 
@@ -389,13 +392,11 @@ bashclaw/
   gateway/
     http_handler.sh     # HTTP request handler + REST API
   ui/
-    index.html          # dashboard shell
-    style.css           # dark/light theme, responsive
-    app.js              # vanilla JS SPA
+    index.html          # single-file SPA (CSS+JS inline, 6 tabs)
   tools/                # external tool scripts
   tests/
     framework.sh        # test runner
-    test_*.sh           # 23 test suites, 334 tests
+    test_*.sh           # test suites
 ```
 
 ## Commands
@@ -566,44 +567,11 @@ bashclaw gateway
 ## Testing
 
 ```sh
-bash tests/run_all.sh              # all 334 tests
-bash tests/run_all.sh --unit       # unit tests only
-bash tests/run_all.sh --compat     # Bash 3.2 verification
+bash tests/run_all.sh                # all tests
+bash tests/run_all.sh --unit         # unit tests only
 bash tests/run_all.sh --integration  # live API tests
-bash tests/test_agent.sh           # single suite
+bash tests/test_agent.sh             # single suite
 ```
-
-<details>
-<summary><strong>Test suites (23)</strong></summary>
-
-| Suite | Tests | Covers |
-|-------|-------|--------|
-| test_utils | 25 | UUID, hash, retry, timestamp |
-| test_config | 25 | Load, get, set, validate |
-| test_session | 26 | JSONL, prune, idle reset, export |
-| test_tools | 28 | 14 tools, SSRF, dispatch |
-| test_routing | 17 | 7-level resolution, allowlist |
-| test_agent | 15 | Model, provider routing, bootstrap |
-| test_channels | 11 | Source parsing, truncation |
-| test_cli | 13 | Argument parsing, routing |
-| test_memory | 10 | Store, search, import/export |
-| test_hooks | 7 | Register, chain, transform |
-| test_security | 8 | Pairing, rate limit, RBAC |
-| test_process | 13 | Queue, lanes, concurrency |
-| test_boot | 2 | BOOT.md parsing |
-| test_autoreply | 6 | Pattern match, filters |
-| test_daemon | 3 | Install, status |
-| test_install | 2 | Installer verification |
-| test_heartbeat | 18 | Guard chain, active hours |
-| test_events | 12 | FIFO queue, drain, dedup |
-| test_cron_advanced | 17 | Schedule types, backoff |
-| test_plugin | 14 | Discover, load, register |
-| test_skills | 11 | Skill discovery, loading |
-| test_dedup | 13 | TTL cache, expiry |
-| test_integration | 11 | Live API, multi-turn |
-| test_compat | 10 | Bash 3.2 verification |
-
-</details>
 
 ## Troubleshooting
 

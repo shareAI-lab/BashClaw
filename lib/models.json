@@ -326,7 +326,7 @@
     },
     "minimax": {
       "api": "openai",
-      "base_url": "https://api.minimax.io",
+      "base_url": "https://api.minimax.chat",
       "api_key_env": "MINIMAX_API_KEY",
       "models": [
         {

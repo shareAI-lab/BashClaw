@@ -187,6 +187,7 @@ agent_run_memory_flush() {
   local model provider max_tokens
   model="$(agent_resolve_model "$agent_id")"
   provider="$(agent_resolve_provider "$model")"
+  provider="$(_provider_with_proxy_fallback "$provider")"
   max_tokens="$(_model_max_tokens "$model")"
 
   local max_history
@@ -310,6 +311,7 @@ agent_run() {
   local model provider
   model="$(agent_resolve_model "$agent_id")"
   provider="$(agent_resolve_provider "$model")"
+  provider="$(_provider_with_proxy_fallback "$provider")"
   log_info "Agent run: agent=$agent_id model=$model provider=$provider"
 
   local max_tokens
@@ -415,6 +417,7 @@ agent_run() {
         log_info "Falling back from $current_model to $fallback"
         current_model="$fallback"
         current_provider="$(agent_resolve_provider "$current_model")"
+        current_provider="$(_provider_with_proxy_fallback "$current_provider")"
         max_tokens="$(_model_max_tokens "$current_model")"
         compaction_retries=0
         iteration=$((iteration - 1))

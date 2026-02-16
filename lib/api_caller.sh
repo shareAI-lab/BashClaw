@@ -162,18 +162,16 @@ agent_call_openai() {
   require_command curl "agent_call_openai requires curl"
   require_command jq "agent_call_openai requires jq"
 
-  local api_key
-  api_key="$(agent_resolve_api_key "openai")"
-
   local provider
   provider="$(agent_resolve_provider "$model")"
+  provider="$(_provider_with_proxy_fallback "$provider")"
   local api_base
   api_base="$(_provider_api_url "$provider")"
   if [[ -z "$api_base" ]]; then
     api_base="${OPENAI_BASE_URL:-https://api.openai.com}"
   fi
-  local api_key_resolved
-  api_key_resolved="$(agent_resolve_api_key "$provider")"
+  local api_key
+  api_key="$(agent_resolve_api_key "$provider")"
 
   local api_url="${api_base}/v1/chat/completions"
 
@@ -238,7 +236,7 @@ agent_call_openai() {
   headers_file="$(tmpfile "openai_headers")"
 
   _api_write_headers "$headers_file" \
-    "Authorization: Bearer ${api_key_resolved}" \
+    "Authorization: Bearer ${api_key}" \
     "Content-Type: application/json"
 
   local http_code
@@ -288,6 +286,16 @@ _openai_normalize_response() {
   else
     local text
     text="$(printf '%s' "$response" | jq -r '.choices[0].message.content // ""')"
+    # Strip inline reasoning tags (e.g. MiniMax <think>...</think>, DeepSeek <think>...</think>)
+    if [[ "$text" == *"<think>"* ]]; then
+      text="$(printf '%s' "$text" | awk '
+        BEGIN { skip=0 }
+        /<think>/ { skip=1; next }
+        /<\/think>/ { skip=0; next }
+        !skip { print }
+      ' | sed '/^[[:space:]]*$/d')"
+      text="${text#"${text%%[![:space:]]*}"}"
+    fi
     printf '%s' "$response" | jq --arg sr "$mapped_reason" --arg text "$text" '{
       stop_reason: $sr,
       content: [{type: "text", text: $text}],

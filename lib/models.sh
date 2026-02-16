@@ -178,6 +178,41 @@ agent_resolve_provider() {
   printf 'anthropic'
 }
 
+# When the resolved provider's API key is missing but ANTHROPIC_BASE_URL proxy is
+# configured, fall back to anthropic provider. This handles proxy/gateway setups
+# (e.g. BigModel serving glm-5 via Anthropic-compatible API).
+_provider_with_proxy_fallback() {
+  local provider="$1"
+
+  if [[ "$provider" == "anthropic" ]]; then
+    printf '%s' "$provider"
+    return
+  fi
+
+  # Check if native provider key is available
+  local catalog key_env key_val
+  catalog="$(_models_catalog_load)"
+  key_env="$(printf '%s' "$catalog" | jq -r --arg p "$provider" \
+    '.providers[$p].api_key_env // empty' 2>/dev/null)"
+
+  if [[ -n "$key_env" ]]; then
+    eval "key_val=\"\${${key_env}:-}\""
+    if [[ -n "$key_val" ]]; then
+      printf '%s' "$provider"
+      return
+    fi
+  fi
+
+  # Native key not available; check for ANTHROPIC_BASE_URL proxy
+  if [[ -n "${ANTHROPIC_BASE_URL:-}" && -n "${ANTHROPIC_API_KEY:-}" ]]; then
+    log_debug "Provider $provider key ($key_env) not found, using anthropic proxy"
+    printf 'anthropic'
+    return
+  fi
+
+  printf '%s' "$provider"
+}
+
 # Data-driven API key resolution from models.json providers section
 agent_resolve_api_key() {
   local provider="$1"
