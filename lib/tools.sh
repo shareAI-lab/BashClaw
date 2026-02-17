@@ -1203,9 +1203,9 @@ tool_list_files() {
   local count=0
 
   if [[ "$recursive" == "true" ]]; then
-    local find_args=""
+    local find_args=()
     if [[ -n "$pattern" ]]; then
-      find_args="-name $pattern"
+      find_args=(-name "$pattern")
     fi
     local f
     local entries_ndjson=""
@@ -1223,7 +1223,7 @@ tool_list_files() {
       entries_ndjson="${entries_ndjson}$(jq -nc --arg n "$rel" --arg t "$ftype" '{name: $n, type: $t}')"$'\n'
       count=$((count + 1))
     done <<EOF
-$(find "$path" -maxdepth 10 ${find_args} 2>/dev/null | head -n "$TOOL_LIST_FILES_MAX")
+$(find "$path" -maxdepth 10 "${find_args[@]}" 2>/dev/null | head -n "$TOOL_LIST_FILES_MAX")
 EOF
     if [[ -n "$entries_ndjson" ]]; then
       entries="$(printf '%s' "$entries_ndjson" | jq -s '.')"
