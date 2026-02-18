@@ -781,10 +781,18 @@ tool_shell() {
   fi
 
   local output exit_code
+  local had_errexit=0
+  if [[ "$-" == *e* ]]; then
+    had_errexit=1
+    set +e
+  fi
+
   if is_command_available timeout; then
-    output="$(timeout "$timeout_val" bash -c "$cmd" 2>&1)" || true
+    output="$(timeout "$timeout_val" bash -c "$cmd" 2>&1)"
+    exit_code=$?
   elif is_command_available gtimeout; then
-    output="$(gtimeout "$timeout_val" bash -c "$cmd" 2>&1)" || true
+    output="$(gtimeout "$timeout_val" bash -c "$cmd" 2>&1)"
+    exit_code=$?
   else
     # Pure-bash timeout fallback (macOS/Termux)
     local _tmpout
@@ -798,15 +806,20 @@ tool_shell() {
     done
     if kill -0 "$_pid" 2>/dev/null; then
       kill -9 "$_pid" 2>/dev/null
-      wait "$_pid" 2>/dev/null || true
+      wait "$_pid" 2>/dev/null
       output="[command timed out after ${timeout_val}s]"
+      exit_code=124
     else
-      wait "$_pid" 2>/dev/null || true
+      wait "$_pid" 2>/dev/null
+      exit_code=$?
       output="$(cat "$_tmpout")"
     fi
     rm -f "$_tmpout"
   fi
-  exit_code=$?
+
+  if [[ "$had_errexit" -eq 1 ]]; then
+    set -e
+  fi
 
   # Truncate output to 100KB
   if [ "${#output}" -gt 102400 ]; then
@@ -1240,9 +1253,9 @@ tool_list_files() {
   local count=0
 
   if [[ "$recursive" == "true" ]]; then
-    local find_args=""
+    local find_args=()
     if [[ -n "$pattern" ]]; then
-      find_args="-name $pattern"
+      find_args=(-name "$pattern")
     fi
     local f
     local entries_ndjson=""
@@ -1260,7 +1273,7 @@ tool_list_files() {
       entries_ndjson="${entries_ndjson}$(jq -nc --arg n "$rel" --arg t "$ftype" '{name: $n, type: $t}')"$'\n'
       count=$((count + 1))
     done <<EOF
-$(find "$path" -maxdepth 10 ${find_args} 2>/dev/null | head -n "$TOOL_LIST_FILES_MAX")
+$(find "$path" -maxdepth 10 "${find_args[@]}" 2>/dev/null | head -n "$TOOL_LIST_FILES_MAX")
 EOF
     if [[ -n "$entries_ndjson" ]]; then
       entries="$(printf '%s' "$entries_ndjson" | jq -s '.')"
