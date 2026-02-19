@@ -9,7 +9,7 @@
 <p>
   <img src="https://img.shields.io/badge/bash-3.2%2B_(2006)-4EAA25?logo=gnubash&logoColor=white" alt="Bash 3.2+" />
   <img src="https://img.shields.io/badge/deps-jq%20%2B%20curl-blue" alt="Dependencies" />
-  <img src="https://img.shields.io/badge/tests-334%20pass-brightgreen" alt="Tests" />
+  <img src="https://img.shields.io/badge/tests-all%20pass-brightgreen" alt="Tests" />
   <img src="https://img.shields.io/badge/RAM-%3C%2010MB-purple" alt="Memory" />
   <a href="https://opensource.org/licenses/MIT">
     <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT" />
@@ -22,6 +22,7 @@
   <a href="#特性">特性</a> &middot;
   <a href="#web-控制台">控制台</a> &middot;
   <a href="#模型提供者">提供者</a> &middot;
+  <a href="#执行引擎">引擎</a> &middot;
   <a href="#消息频道">频道</a> &middot;
   <a href="#架构">架构</a> &middot;
   <a href="README.md">English</a>
@@ -44,6 +45,23 @@ cd bashclaw && ./bashclaw doctor
 ```
 
 ## 快速开始
+
+### 推荐: Claude Code CLI 引擎
+
+如果你有 [Claude Code](https://docs.anthropic.com/en/docs/claude-code) 订阅 (Pro/Max/Team/Enterprise),BashClaw 可以直接使用它作为后端 -- 无需 API 密钥,无按量付费:
+
+```sh
+bashclaw config set '.agents.defaults.engine' '"claude"'
+
+bashclaw agent -m "太阳的质量是多少?"    # 单次问答
+bashclaw agent -i                        # 交互式 REPL
+```
+
+这会将所有推理和工具执行委托给 `claude` CLI,复用你现有的订阅额度。
+
+### 备选: Builtin 引擎 + API 密钥
+
+使用其他提供者或偏好直接 API 访问时:
 
 ```sh
 export ANTHROPIC_API_KEY="sk-ant-..."   # 或 OPENAI_API_KEY, GOOGLE_API_KEY 等
@@ -68,7 +86,7 @@ bashclaw gateway                         # Web 控制台 + 频道
 | macOS 开箱即用      | 否 (需要 Node)   | 是               |
 | Android Termux      | 复杂             | pkg install jq   |
 | 运行时自修改        | 否 (需要构建)    | 是               |
-| 测试                | Vitest           | 334 通过         |
+| 测试                | Vitest           | All pass         |
 +---------------------+------------------+------------------+
 ```
 
@@ -90,7 +108,8 @@ BashClaw 刻意以 Bash 3.2 为目标: 不用 `declare -A`、不用 `mapfile`、
 
 - **纯 Shell** -- 仅依赖 bash 3.2, curl, jq。你的机器上已经有了。
 - **自修改** -- 智能体在运行时热修改自身源代码。无编译步骤。
-- **多提供者** -- 9 个提供者: Claude, GPT, Gemini, DeepSeek, 通义千问, 智谱 GLM, Moonshot, MiniMax, OpenRouter。
+- **双引擎** -- Claude Code CLI (复用订阅) 或 builtin (curl 直接调用 API)。按智能体独立配置。
+- **多提供者** -- 18 个提供者: Claude, GPT, Gemini, DeepSeek, 通义千问, 智谱, Moonshot, MiniMax, Groq, xAI, Mistral, Ollama, vLLM 等。
 - **多频道** -- Telegram, Discord, Slack, 飞书/Lark。每个频道是一个 Shell 脚本。
 - **Web 控制台** -- 内置浏览器界面,用于聊天、配置和监控。无需外部工具。
 - **14 个内置工具** -- Web 抓取、搜索、Shell 执行、记忆、定时任务、文件 I/O、智能体间通信。
@@ -101,7 +120,7 @@ BashClaw 刻意以 Bash 3.2 为目标: 不用 `declare -A`、不用 `mapfile`、
 - **14 个钩子事件** -- 消息、工具、压缩、会话生命周期的前/后钩子。
 - **热配置重载** -- `kill -USR1` 网关进程即可重载配置。
 - **守护进程** -- systemd, launchd, Termux 开机启动, crontab 回退。
-- **334 个测试** -- 单元测试、兼容性 (Bash 3.2 验证)、集成测试。473 个断言。
+- **测试** -- 单元测试、兼容性、集成测试。`bash tests/run_all.sh`。
 
 ## Web 控制台
 
@@ -170,7 +189,32 @@ PUT  /api/env           保存 API 密钥
 
 ## 模型提供者
 
-BashClaw 支持 9 个提供者,基于数据驱动路由。添加提供者只需一个 JSON 条目,无需修改代码。
+Builtin 引擎支持 18 个提供者,基于数据驱动路由。所有配置在 `lib/models.json` 中 -- 添加提供者只需一个 JSON 条目,无需修改代码。
+
+### 预配置的提供者和模型
+
+BashClaw 内置 25+ 预配置模型。设置 API 密钥即可使用:
+
+| 提供者 | API 密钥环境变量 | 预配置模型 | API 格式 |
+|-------|-----------------|-----------|----------|
+| **Anthropic** | `ANTHROPIC_API_KEY` | claude-opus-4-6, claude-sonnet-4, claude-haiku-3 | Anthropic |
+| **OpenAI** | `OPENAI_API_KEY` | gpt-4o, gpt-4o-mini, o1, o3-mini | OpenAI |
+| **Google** | `GOOGLE_API_KEY` | gemini-2.0-flash, gemini-2.0-flash-lite, gemini-1.5-pro | Google |
+| **DeepSeek** | `DEEPSEEK_API_KEY` | deepseek-chat, deepseek-reasoner | OpenAI |
+| **通义千问** | `QWEN_API_KEY` | qwen-max, qwen-plus, qwq-plus | OpenAI |
+| **智谱** | `ZHIPU_API_KEY` | glm-5, glm-4-flash | OpenAI |
+| **Moonshot** | `MOONSHOT_API_KEY` | kimi-k2.5 | OpenAI |
+| **MiniMax** | `MINIMAX_API_KEY` | MiniMax-M2.5, MiniMax-M2.1 | OpenAI |
+| **小米** | `XIAOMI_API_KEY` | mimo-v2-flash | Anthropic |
+| **百度千帆** | `QIANFAN_API_KEY` | deepseek-v3.2, ernie-5.0-thinking-preview | OpenAI |
+| **NVIDIA** | `NVIDIA_API_KEY` | llama-3.1-nemotron-70b | OpenAI |
+| **Groq** | `GROQ_API_KEY` | llama-3.3-70b-versatile | OpenAI |
+| **xAI** | `XAI_API_KEY` | grok-3 | OpenAI |
+| **Mistral** | `MISTRAL_API_KEY` | mistral-large-latest | OpenAI |
+| **OpenRouter** | `OPENROUTER_API_KEY` | 通过 OpenRouter 访问任意模型 | OpenAI |
+| **Together** | `TOGETHER_API_KEY` | 通过 Together 访问任意模型 | OpenAI |
+| **Ollama** | -- | 任意本地模型 | OpenAI |
+| **vLLM** | -- | 任意本地模型 | OpenAI |
 
 ```sh
 # Anthropic (默认)
@@ -210,11 +254,15 @@ MODEL_ID=glm-5 bashclaw agent -m "hello"
 
 # Moonshot Kimi
 export MOONSHOT_API_KEY="sk-..."
-MODEL_ID=kimi-2.5 bashclaw agent -m "hello"
+MODEL_ID=kimi-k2.5 bashclaw agent -m "hello"
 
 # MiniMax
 export MINIMAX_API_KEY="..."
-MODEL_ID=minimax-2.5 bashclaw agent -m "hello"
+MODEL_ID=MiniMax-M2.5 bashclaw agent -m "hello"
+
+# 百度千帆
+export QIANFAN_API_KEY="..."
+MODEL_ID=ernie-5.0-thinking-preview bashclaw agent -m "hello"
 ```
 
 </details>
@@ -223,18 +271,210 @@ MODEL_ID=minimax-2.5 bashclaw agent -m "hello"
 <summary><strong>模型别名</strong></summary>
 
 ```sh
-MODEL_ID=fast       # -> gemini-2.0-flash
-MODEL_ID=smart      # -> claude-opus-4
+MODEL_ID=smart      # -> claude-opus-4-6
 MODEL_ID=balanced   # -> claude-sonnet-4
+MODEL_ID=fast       # -> gemini-2.0-flash
 MODEL_ID=cheap      # -> gpt-4o-mini
+MODEL_ID=opus       # -> claude-opus-4-6
+MODEL_ID=sonnet     # -> claude-sonnet-4
+MODEL_ID=haiku      # -> claude-haiku-3
+MODEL_ID=gpt        # -> gpt-4o
+MODEL_ID=gemini     # -> gemini-2.0-flash
 MODEL_ID=deepseek   # -> deepseek-chat
 MODEL_ID=qwen       # -> qwen-max
 MODEL_ID=glm        # -> glm-5
-MODEL_ID=kimi       # -> kimi-2.5
-MODEL_ID=minimax    # -> minimax-2.5
+MODEL_ID=kimi       # -> kimi-k2.5
+MODEL_ID=minimax    # -> MiniMax-M2.5
+MODEL_ID=grok       # -> grok-3
+MODEL_ID=mistral    # -> mistral-large-latest
 ```
 
 </details>
+
+### 自定义 Base URL
+
+每个提供者支持通过环境变量覆盖 Base URL。适用于代理、私有部署或自托管模型:
+
+```sh
+# Anthropic 格式端点 (代理或兼容服务)
+export ANTHROPIC_API_KEY="your-key"
+export ANTHROPIC_BASE_URL="https://your-proxy.example.com/v1"
+bashclaw agent -m "hello"
+
+# OpenAI 格式端点 (Azure OpenAI、LiteLLM 或任意兼容服务)
+export OPENAI_API_KEY="your-key"
+export OPENAI_BASE_URL="https://your-endpoint.example.com/v1"
+MODEL_ID=gpt-4o bashclaw agent -m "hello"
+
+# Google 格式端点
+export GOOGLE_API_KEY="your-key"
+export GOOGLE_AI_BASE_URL="https://your-proxy.example.com/v1beta"
+MODEL_ID=gemini-2.0-flash bashclaw agent -m "hello"
+
+# 本地 Ollama (无需 API 密钥)
+export OLLAMA_BASE_URL="http://localhost:11434/v1"
+MODEL_ID=llama3.3 bashclaw agent -m "hello"
+
+# 本地 vLLM 服务
+export VLLM_BASE_URL="http://127.0.0.1:8000/v1"
+MODEL_ID=your-model bashclaw agent -m "hello"
+
+# OpenRouter (通过单一 API 访问任意模型)
+export OPENROUTER_API_KEY="sk-or-..."
+MODEL_ID=meta-llama/llama-3.3-70b-instruct bashclaw agent -m "hello"
+```
+
+如果提供的 Base URL 不包含版本路径 (如 `http://localhost:8000`),BashClaw 会自动追加 `/v1` (Google 格式追加 `/v1beta`)。
+
+### 三种 API 格式
+
+Builtin 引擎支持三种 API 格式。大多数提供者使用 OpenAI 兼容格式:
+
+| 格式 | 端点 | 提供者 |
+|------|------|--------|
+| **Anthropic** | `POST /v1/messages` | Anthropic, 小米 |
+| **OpenAI** | `POST /v1/chat/completions` | OpenAI, DeepSeek, 通义千问, 智谱, Moonshot, MiniMax, Groq, xAI, Mistral, OpenRouter, Ollama, vLLM, 千帆, NVIDIA, Together |
+| **Google** | `POST /v1beta/models/{model}:generateContent` | Google |
+
+任何实现了上述格式之一的服务都可以直接使用。
+
+## 执行引擎
+
+BashClaw 具有可插拔的引擎层,决定智能体任务如何执行。每个智能体可以使用不同的引擎。
+
+### Claude 引擎 (推荐)
+
+**claude** 引擎将执行委托给 [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code)。直接复用你的 Claude 订阅 -- 无需 API 密钥,无按量付费。
+
+```sh
+# 设置 claude 为默认引擎
+bashclaw config set '.agents.defaults.engine' '"claude"'
+
+# 使用
+bashclaw agent -m "重构这个函数以提高可读性"
+```
+
+**工作方式:**
+- 调用 `claude -p --output-format json` 作为子进程
+- Claude Code 使用原生工具 (Read、Write、Bash、Glob、Grep 等) 处理工具循环
+- BashClaw 特有的工具 (memory、cron、spawn、agent_message) 通过 `bashclaw tool <name>` CLI 调用桥接
+- 会话状态同时保存在 BashClaw JSONL 和 Claude Code 原生会话中
+- 钩子通过 `--settings` JSON 注入桥接
+
+**前置要求:** 已安装 `claude` CLI 并完成认证 (`claude login`)。
+
+<details>
+<summary><strong>Claude 引擎配置</strong></summary>
+
+```json
+{
+  "agents": {
+    "defaults": {
+      "engine": "claude",
+      "maxTurns": 50
+    },
+    "list": [
+      {
+        "id": "coder",
+        "engine": "claude",
+        "engineModel": "opus",
+        "maxTurns": 30
+      }
+    ]
+  }
+}
+```
+
+| 配置字段 | 说明 |
+|---------|------|
+| `engine` | `"claude"` 使用 Claude Code CLI |
+| `engineModel` | 覆盖模型 (如 `"opus"`, `"sonnet"`, `"haiku"`)。为空时使用订阅默认模型。 |
+| `maxTurns` | 每次调用的最大推理轮数 |
+
+| 环境变量 | 默认值 | 用途 |
+|---------|--------|------|
+| `ENGINE_CLAUDE_TIMEOUT` | `300` | Claude CLI 执行超时 (秒) |
+| `ENGINE_CLAUDE_MODEL` | -- | 覆盖模型 (配置中 `engineModel` 的替代方式) |
+
+</details>
+
+### Builtin 引擎
+
+**builtin** 引擎通过 curl 直接调用 LLM API。支持 18 个提供者和 25+ 预配置模型,并兼容任何 OpenAI 兼容端点。
+
+```sh
+# builtin 是默认引擎 (无需额外配置)
+export ANTHROPIC_API_KEY="sk-ant-..."
+bashclaw agent -m "hello"
+```
+
+**工作方式:**
+- 直接调用提供者 API (Anthropic、OpenAI、Google 等 18 个)
+- 运行 BashClaw 自身的工具循环 (迭代次数通过 `maxTurns` 配置)
+- 自动处理上下文溢出: 压缩 -> 模型降级 -> 会话重置
+- 三种 API 格式: Anthropic (`/v1/messages`)、OpenAI 兼容 (`/v1/chat/completions`)、Google (`/v1beta/.../generateContent`)
+
+### Auto 引擎
+
+设置 `engine` 为 `"auto"` 让 BashClaw 自动检测: 如果安装了 `claude` CLI 则使用 claude 引擎,否则回退到 builtin。
+
+```sh
+bashclaw config set '.agents.defaults.engine' '"auto"'
+```
+
+### 工具映射 (Claude 引擎)
+
+使用 Claude 引擎时,BashClaw 工具尽可能映射到 Claude Code 原生工具。没有原生对应的工具通过 CLI 桥接:
+
+| BashClaw 工具 | Claude Code 工具 | 方式 |
+|--------------|-----------------|------|
+| `web_fetch` | WebFetch | 原生映射 |
+| `web_search` | WebSearch | 原生映射 |
+| `shell` | Bash | 原生映射 |
+| `read_file` | Read | 原生映射 |
+| `write_file` | Write | 原生映射 |
+| `list_files` | Glob | 原生映射 |
+| `file_search` | Grep | 原生映射 |
+| `memory` | -- | `bashclaw tool memory` |
+| `cron` | -- | `bashclaw tool cron` |
+| `agent_message` | -- | `bashclaw tool agent_message` |
+| `spawn` | -- | `bashclaw tool spawn` |
+
+### 混合引擎配置
+
+不同的智能体可以使用不同的引擎:
+
+```json
+{
+  "agents": {
+    "defaults": { "engine": "claude" },
+    "list": [
+      {
+        "id": "coder",
+        "engine": "claude",
+        "engineModel": "opus"
+      },
+      {
+        "id": "chat",
+        "engine": "builtin",
+        "model": "gpt-4o"
+      },
+      {
+        "id": "local",
+        "engine": "builtin",
+        "model": "llama-3.3-70b-versatile"
+      }
+    ]
+  }
+}
+```
+
+**两个引擎共享:**
+- 生命周期钩子 (before_agent_start, pre_message, post_message, agent_end)
+- 会话持久化 (JSONL)
+- 工作区加载 (SOUL.md, MEMORY.md, BOOT.md, IDENTITY.md)
+- 安全层 (限流、工具策略、RBAC)
+- 配置格式 (`maxTurns`、工具允许/拒绝列表、工具配置文件)
 
 ## 消息频道
 
@@ -305,12 +545,14 @@ bashclaw gateway
 +------+------+        +-------+-------+        +-------+-------+
 |    频道     |        |   核心引擎    |        |   后台服务    |
 +------+------+        +-------+-------+        +-------+-------+
-| telegram.sh |        | agent.sh      |        | heartbeat.sh  |
-| discord.sh  |        | routing.sh    |        | cron.sh       |
-| slack.sh    |        | session.sh    |        | events.sh     |
-| feishu.sh   |        | tools.sh (14) |        | process.sh    |
-| (插件)      |        | memory.sh     |        | daemon.sh     |
-+-------------+        | config.sh     |        +---------------+
+| telegram.sh |        | engine.sh     |        | heartbeat.sh  |
+| discord.sh  |        |   +- agent.sh |        | cron.sh       |
+| slack.sh    |        |   +- claude.sh|        | events.sh     |
+| feishu.sh   |        | routing.sh    |        | process.sh    |
+| (插件)      |        | session.sh    |        | daemon.sh     |
++-------------+        | tools.sh (14) |        +---------------+
+                       | memory.sh     |
+                       | config.sh     |
                        +---------------+
                                 |
        +------------------------+------------------------+
@@ -342,6 +584,9 @@ bashclaw gateway
 处理队列 (主: 4, 定时: 1, 子智能体: 8 并发通道)
   |
   v
+引擎调度 (builtin: 直接 API 调用 | claude: Claude Code CLI)
+  |
+  v
 智能体运行时
   1. 解析模型 + 提供者 (数据驱动, models.json)
   2. 加载工作区 (SOUL.md, MEMORY.md, BOOT.md, IDENTITY.md)
@@ -362,6 +607,8 @@ bashclaw/
   install.sh            # 独立安装脚本
   lib/
     agent.sh            # 智能体运行时、模型/提供者调度
+    engine.sh           # 引擎抽象层 (builtin / claude / auto)
+    engine_claude.sh    # Claude Code CLI 引擎集成
     config.sh           # JSON 配置 (基于 jq)
     session.sh          # JSONL 会话持久化
     routing.sh          # 7 级消息路由
@@ -566,7 +813,7 @@ bashclaw gateway
 ## 测试
 
 ```sh
-bash tests/run_all.sh              # 全部 334 个测试
+bash tests/run_all.sh              # 全部测试
 bash tests/run_all.sh --unit       # 仅单元测试
 bash tests/run_all.sh --compat     # Bash 3.2 兼容性验证
 bash tests/run_all.sh --integration  # 实时 API 测试

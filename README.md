@@ -22,6 +22,7 @@ Pure-shell AI agent runtime. No Node.js, no Python, no compiled binaries.
   <a href="#features">Features</a> &middot;
   <a href="#web-dashboard">Dashboard</a> &middot;
   <a href="#providers">Providers</a> &middot;
+  <a href="#engines">Engines</a> &middot;
   <a href="#channels">Channels</a> &middot;
   <a href="#architecture">Architecture</a> &middot;
   <a href="README_CN.md">&#x4E2D;&#x6587;</a>
@@ -44,6 +45,23 @@ cd bashclaw && ./bashclaw doctor
 ```
 
 ## Quick Start
+
+### Recommended: Claude Code CLI Engine
+
+If you have a [Claude Code](https://docs.anthropic.com/en/docs/claude-code) subscription (Pro/Max/Team/Enterprise), BashClaw can use it directly as its backend -- no API keys, no per-token cost:
+
+```sh
+bashclaw config set '.agents.defaults.engine' '"claude"'
+
+bashclaw agent -m "What is the mass of the sun?"   # one-shot
+bashclaw agent -i                                    # interactive REPL
+```
+
+This delegates all reasoning and tool execution to the `claude` CLI, reusing your existing subscription.
+
+### Alternative: Builtin Engine with API Keys
+
+For other providers or if you prefer direct API access:
 
 ```sh
 export ANTHROPIC_API_KEY="sk-ant-..."   # or OPENAI_API_KEY, GOOGLE_API_KEY, etc.
@@ -90,7 +108,8 @@ BashClaw targets Bash 3.2 deliberately: no `declare -A`, no `mapfile`, no `|&`. 
 
 - **Pure shell** -- Zero dependencies beyond bash 3.2, curl, jq. Already on your machine.
 - **Self-modifying** -- Agent hot-patches its own source at runtime. No compilation step.
-- **Multi-provider** -- 9 providers: Claude, GPT, Gemini, DeepSeek, Qwen, Zhipu GLM, Moonshot, MiniMax, OpenRouter.
+- **Dual engine** -- Claude Code CLI (reuses subscription) or builtin (direct API via curl). Per-agent configurable.
+- **Multi-provider** -- 18 providers: Claude, GPT, Gemini, DeepSeek, Qwen, Zhipu, Moonshot, MiniMax, Groq, xAI, Mistral, Ollama, vLLM, and more.
 - **Multi-channel** -- Telegram, Discord, Slack, Feishu/Lark. Each channel is one shell script.
 - **Web dashboard** -- Built-in browser UI for chat, config, and monitoring. No external tools.
 - **14 built-in tools** -- Web fetch, search, shell exec, memory, cron, file I/O, inter-agent messaging.
@@ -173,7 +192,32 @@ PUT  /api/env           Save API keys
 
 ## Providers
 
-BashClaw supports 9 providers with data-driven routing. Adding a provider is a JSON entry -- no code changes.
+The builtin engine supports 18 providers with data-driven routing. All configuration is in `lib/models.json` -- adding a provider is a JSON entry, no code changes.
+
+### Pre-configured Providers and Models
+
+BashClaw ships with 25+ pre-configured models. Set the API key and go:
+
+| Provider | API Key Env | Pre-configured Models | API Format |
+|----------|------------|----------------------|------------|
+| **Anthropic** | `ANTHROPIC_API_KEY` | claude-opus-4-6, claude-sonnet-4, claude-haiku-3 | Anthropic |
+| **OpenAI** | `OPENAI_API_KEY` | gpt-4o, gpt-4o-mini, o1, o3-mini | OpenAI |
+| **Google** | `GOOGLE_API_KEY` | gemini-2.0-flash, gemini-2.0-flash-lite, gemini-1.5-pro | Google |
+| **DeepSeek** | `DEEPSEEK_API_KEY` | deepseek-chat, deepseek-reasoner | OpenAI |
+| **Qwen** | `QWEN_API_KEY` | qwen-max, qwen-plus, qwq-plus | OpenAI |
+| **Zhipu** | `ZHIPU_API_KEY` | glm-5, glm-4-flash | OpenAI |
+| **Moonshot** | `MOONSHOT_API_KEY` | kimi-k2.5 | OpenAI |
+| **MiniMax** | `MINIMAX_API_KEY` | MiniMax-M2.5, MiniMax-M2.1 | OpenAI |
+| **Xiaomi** | `XIAOMI_API_KEY` | mimo-v2-flash | Anthropic |
+| **Baidu Qianfan** | `QIANFAN_API_KEY` | deepseek-v3.2, ernie-5.0-thinking-preview | OpenAI |
+| **NVIDIA** | `NVIDIA_API_KEY` | llama-3.1-nemotron-70b | OpenAI |
+| **Groq** | `GROQ_API_KEY` | llama-3.3-70b-versatile | OpenAI |
+| **xAI** | `XAI_API_KEY` | grok-3 | OpenAI |
+| **Mistral** | `MISTRAL_API_KEY` | mistral-large-latest | OpenAI |
+| **OpenRouter** | `OPENROUTER_API_KEY` | any model via OpenRouter | OpenAI |
+| **Together** | `TOGETHER_API_KEY` | any model via Together | OpenAI |
+| **Ollama** | -- | any local model | OpenAI |
+| **vLLM** | -- | any local model | OpenAI |
 
 ```sh
 # Anthropic (default)
@@ -213,11 +257,15 @@ MODEL_ID=glm-5 bashclaw agent -m "hello"
 
 # Moonshot Kimi
 export MOONSHOT_API_KEY="sk-..."
-MODEL_ID=kimi-2.5 bashclaw agent -m "hello"
+MODEL_ID=kimi-k2.5 bashclaw agent -m "hello"
 
 # MiniMax
 export MINIMAX_API_KEY="..."
-MODEL_ID=minimax-2.5 bashclaw agent -m "hello"
+MODEL_ID=MiniMax-M2.5 bashclaw agent -m "hello"
+
+# Baidu Qianfan
+export QIANFAN_API_KEY="..."
+MODEL_ID=ernie-5.0-thinking-preview bashclaw agent -m "hello"
 ```
 
 </details>
@@ -226,18 +274,210 @@ MODEL_ID=minimax-2.5 bashclaw agent -m "hello"
 <summary><strong>Model aliases</strong></summary>
 
 ```sh
-MODEL_ID=fast       # -> gemini-2.0-flash
-MODEL_ID=smart      # -> claude-opus-4
+MODEL_ID=smart      # -> claude-opus-4-6
 MODEL_ID=balanced   # -> claude-sonnet-4
+MODEL_ID=fast       # -> gemini-2.0-flash
 MODEL_ID=cheap      # -> gpt-4o-mini
+MODEL_ID=opus       # -> claude-opus-4-6
+MODEL_ID=sonnet     # -> claude-sonnet-4
+MODEL_ID=haiku      # -> claude-haiku-3
+MODEL_ID=gpt        # -> gpt-4o
+MODEL_ID=gemini     # -> gemini-2.0-flash
 MODEL_ID=deepseek   # -> deepseek-chat
 MODEL_ID=qwen       # -> qwen-max
 MODEL_ID=glm        # -> glm-5
-MODEL_ID=kimi       # -> kimi-2.5
-MODEL_ID=minimax    # -> minimax-2.5
+MODEL_ID=kimi       # -> kimi-k2.5
+MODEL_ID=minimax    # -> MiniMax-M2.5
+MODEL_ID=grok       # -> grok-3
+MODEL_ID=mistral    # -> mistral-large-latest
 ```
 
 </details>
+
+### Custom Base URL
+
+Every provider supports base URL override via environment variable. This is useful for proxies, private deployments, or self-hosted models:
+
+```sh
+# Anthropic-format endpoint (e.g., proxy or compatible service)
+export ANTHROPIC_API_KEY="your-key"
+export ANTHROPIC_BASE_URL="https://your-proxy.example.com/v1"
+bashclaw agent -m "hello"
+
+# OpenAI-format endpoint (e.g., Azure OpenAI, LiteLLM, or any compatible service)
+export OPENAI_API_KEY="your-key"
+export OPENAI_BASE_URL="https://your-endpoint.example.com/v1"
+MODEL_ID=gpt-4o bashclaw agent -m "hello"
+
+# Google-format endpoint
+export GOOGLE_API_KEY="your-key"
+export GOOGLE_AI_BASE_URL="https://your-proxy.example.com/v1beta"
+MODEL_ID=gemini-2.0-flash bashclaw agent -m "hello"
+
+# Local Ollama (no API key needed)
+export OLLAMA_BASE_URL="http://localhost:11434/v1"
+MODEL_ID=llama3.3 bashclaw agent -m "hello"
+
+# Local vLLM server
+export VLLM_BASE_URL="http://127.0.0.1:8000/v1"
+MODEL_ID=your-model bashclaw agent -m "hello"
+
+# OpenRouter (access any model through a single API)
+export OPENROUTER_API_KEY="sk-or-..."
+MODEL_ID=meta-llama/llama-3.3-70b-instruct bashclaw agent -m "hello"
+```
+
+If you provide a base URL without the version path (e.g., `http://localhost:8000`), BashClaw auto-appends `/v1` (or `/v1beta` for Google).
+
+### Three API Formats
+
+The builtin engine supports three API formats. Most providers use OpenAI-compatible format:
+
+| Format | Endpoint | Providers |
+|--------|----------|-----------|
+| **Anthropic** | `POST /v1/messages` | Anthropic, Xiaomi |
+| **OpenAI** | `POST /v1/chat/completions` | OpenAI, DeepSeek, Qwen, Zhipu, Moonshot, MiniMax, Groq, xAI, Mistral, OpenRouter, Ollama, vLLM, Qianfan, NVIDIA, Together |
+| **Google** | `POST /v1beta/models/{model}:generateContent` | Google |
+
+Any service that implements one of these formats works out of the box.
+
+## Engines
+
+BashClaw has a pluggable engine layer that determines how agent tasks are executed. Each agent can use a different engine.
+
+### Claude Engine (Recommended)
+
+The **claude** engine delegates execution to [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code). It reuses your existing Claude subscription -- no API keys needed, no per-token cost.
+
+```sh
+# Set claude as the default engine
+bashclaw config set '.agents.defaults.engine' '"claude"'
+
+# Use it
+bashclaw agent -m "Refactor this function for readability"
+```
+
+**How it works:**
+- Invokes `claude -p --output-format json` as a subprocess
+- Claude Code handles the tool loop with its native tools (Read, Write, Bash, Glob, Grep, etc.)
+- BashClaw-specific tools (memory, cron, spawn, agent_message) are bridged via `bashclaw tool <name>` CLI calls
+- Session state tracked in both BashClaw JSONL and Claude Code's native session
+- Hooks bridged via `--settings` JSON injection
+
+**Requirements:** `claude` CLI installed and authenticated (`claude login`).
+
+<details>
+<summary><strong>Claude engine configuration</strong></summary>
+
+```json
+{
+  "agents": {
+    "defaults": {
+      "engine": "claude",
+      "maxTurns": 50
+    },
+    "list": [
+      {
+        "id": "coder",
+        "engine": "claude",
+        "engineModel": "opus",
+        "maxTurns": 30
+      }
+    ]
+  }
+}
+```
+
+| Config Field | Description |
+|-------------|-------------|
+| `engine` | `"claude"` to use Claude Code CLI |
+| `engineModel` | Override model (e.g. `"opus"`, `"sonnet"`, `"haiku"`). If empty, uses your subscription's default. |
+| `maxTurns` | Max agentic turns per invocation |
+
+| Environment Variable | Default | Purpose |
+|---------------------|---------|---------|
+| `ENGINE_CLAUDE_TIMEOUT` | `300` | Timeout (seconds) for Claude CLI execution |
+| `ENGINE_CLAUDE_MODEL` | -- | Override model (alternative to `engineModel` in config) |
+
+</details>
+
+### Builtin Engine
+
+The **builtin** engine calls LLM APIs directly via curl. It supports 18 providers and 25+ pre-configured models, and works with any OpenAI-compatible endpoint.
+
+```sh
+# Builtin is the default engine (no config change needed)
+export ANTHROPIC_API_KEY="sk-ant-..."
+bashclaw agent -m "hello"
+```
+
+**How it works:**
+- Calls provider APIs directly (Anthropic, OpenAI, Google, and 15 more)
+- Runs BashClaw's own tool loop (max iterations configurable via `maxTurns`)
+- Handles context overflow with automatic compaction, model fallback, and session reset
+- Three API formats: Anthropic (`/v1/messages`), OpenAI-compatible (`/v1/chat/completions`), Google (`/v1beta/.../generateContent`)
+
+### Auto Engine
+
+Set `engine` to `"auto"` to let BashClaw detect: uses `claude` if the CLI is installed, otherwise falls back to `builtin`.
+
+```sh
+bashclaw config set '.agents.defaults.engine' '"auto"'
+```
+
+### Tool Mapping (Claude Engine)
+
+When using the Claude engine, BashClaw tools are mapped to Claude Code's native equivalents where possible. Tools without a native counterpart are bridged through the CLI:
+
+| BashClaw Tool | Claude Code Tool | Method |
+|---------------|-----------------|--------|
+| `web_fetch` | WebFetch | native |
+| `web_search` | WebSearch | native |
+| `shell` | Bash | native |
+| `read_file` | Read | native |
+| `write_file` | Write | native |
+| `list_files` | Glob | native |
+| `file_search` | Grep | native |
+| `memory` | -- | `bashclaw tool memory` |
+| `cron` | -- | `bashclaw tool cron` |
+| `agent_message` | -- | `bashclaw tool agent_message` |
+| `spawn` | -- | `bashclaw tool spawn` |
+
+### Mixed Engine Configuration
+
+Different agents can use different engines:
+
+```json
+{
+  "agents": {
+    "defaults": { "engine": "claude" },
+    "list": [
+      {
+        "id": "coder",
+        "engine": "claude",
+        "engineModel": "opus"
+      },
+      {
+        "id": "chat",
+        "engine": "builtin",
+        "model": "gpt-4o"
+      },
+      {
+        "id": "local",
+        "engine": "builtin",
+        "model": "llama-3.3-70b-versatile"
+      }
+    ]
+  }
+}
+```
+
+**Both engines share the same:**
+- Lifecycle hooks (before_agent_start, pre_message, post_message, agent_end)
+- Session persistence (JSONL)
+- Workspace loading (SOUL.md, MEMORY.md, BOOT.md, IDENTITY.md)
+- Security layer (rate limiting, tool policies, RBAC)
+- Config format (`maxTurns`, tool allow/deny lists, tool profiles)
 
 ## Channels
 
@@ -308,12 +548,14 @@ bashclaw gateway
 +------+------+        +-------+-------+        +-------+-------+
 |   Channels  |        |  Core Engine  |        |  Background   |
 +------+------+        +-------+-------+        +-------+-------+
-| telegram.sh |        | agent.sh      |        | heartbeat.sh  |
-| discord.sh  |        | routing.sh    |        | cron.sh       |
-| slack.sh    |        | session.sh    |        | events.sh     |
-| feishu.sh   |        | tools.sh (14) |        | process.sh    |
-| (plugins)   |        | memory.sh     |        | daemon.sh     |
-+-------------+        | config.sh     |        +---------------+
+| telegram.sh |        | engine.sh     |        | heartbeat.sh  |
+| discord.sh  |        |   +- agent.sh |        | cron.sh       |
+| slack.sh    |        |   +- claude.sh|        | events.sh     |
+| feishu.sh   |        | routing.sh    |        | process.sh    |
+| (plugins)   |        | session.sh    |        | daemon.sh     |
++-------------+        | tools.sh (14) |        +---------------+
+                       | memory.sh     |
+                       | config.sh     |
                        +---------------+
                                 |
        +------------------------+------------------------+
@@ -345,6 +587,9 @@ Security Gate (rate limit -> pairing -> tool policy -> RBAC)
 Process Queue (main: 4, cron: 1, subagent: 8 concurrent lanes)
   |
   v
+Engine Dispatch (builtin: direct API | claude: Claude Code CLI)
+  |
+  v
 Agent Runtime
   1. Resolve model + provider (data-driven, models.json)
   2. Load workspace (SOUL.md, MEMORY.md, BOOT.md, IDENTITY.md)
@@ -365,6 +610,8 @@ bashclaw/
   install.sh            # standalone installer
   lib/
     agent.sh            # agent runtime, model/provider dispatch
+    engine.sh           # engine abstraction (builtin / claude / auto)
+    engine_claude.sh    # Claude Code CLI engine integration
     config.sh           # JSON config (jq-based)
     session.sh          # JSONL session persistence
     routing.sh          # 7-level message routing
