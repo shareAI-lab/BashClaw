@@ -853,7 +853,7 @@ _cron_next_match() {
   printf '0'
 }
 
-# Migrate legacy individual JSON job files into the consolidated store
+# Migrate individual JSON job files into the consolidated store
 _cron_migrate_legacy() {
   local dir="$1"
   local store="$2"

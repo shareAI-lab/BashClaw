@@ -673,7 +673,7 @@ cmd_tool() {
     fi
   fi
 
-  # Fire pre_tool hook (parity with builtin engine's per-tool hooks)
+  # Fire pre_tool hook
   if declare -f hooks_run &>/dev/null; then
     local hook_data
     hook_data="$(jq -nc --arg tn "$tool_name" --arg ti "$tool_input" \

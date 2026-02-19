@@ -282,7 +282,7 @@ ${message}"
   response_file="$(tmpfile "claude_engine")"
   error_file="$(tmpfile "claude_engine_err")"
 
-  (export BASHCLAW_STATE_DIR BASHCLAW_CONFIG LOG_LEVEL
+  (export BASHCLAW_STATE_DIR BASHCLAW_CONFIG LOG_LEVEL CLAUDE_CODE_ENTRYPOINT="bashclaw"
    claude -p "$full_message" "${args[@]}" > "$response_file" 2>"$error_file") &
   local claude_pid=$!
 

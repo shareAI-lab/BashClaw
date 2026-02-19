@@ -374,7 +374,7 @@ handle_request() {
   esac
 }
 
-# ---- Legacy Route Implementations ----
+# ---- Route Implementations ----
 
 _handle_status() {
   require_command jq "status handler requires jq"

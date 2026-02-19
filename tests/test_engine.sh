@@ -1036,7 +1036,7 @@ result="$(printf '{"tool_name":"Read"}' | bash "${BASHCLAW_ROOT}/bashclaw" hooks
 assert_eq "$result" "{}"
 teardown_test_env
 
-# ---- Phase D: New parity tests ----
+# ---- Extended engine tests ----
 
 test_start "is_subagent=true blocks SOUL.md in prompt"
 setup_test_env

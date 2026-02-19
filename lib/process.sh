@@ -154,7 +154,7 @@ process_status() {
     '{pending: $p, processing: $r, completed: $c}'
 }
 
-# Check if an agent has available concurrency lanes (legacy per-agent check)
+# Check if an agent has available concurrency lanes
 process_lanes_check() {
   local agent_id="${1:?agent_id required}"
 
